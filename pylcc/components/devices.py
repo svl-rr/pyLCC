@@ -341,5 +341,15 @@ class Output(BaseComponent):
         await self._notify_change(self.state)
 
 
-# Alias
+# Aliases
 Light = Output
+
+# LCC-prefixed aliases for layout naming and collision prevention
+LCCTurnout = Turnout
+LCCSensor = Sensor
+LCCBlockDetector = BlockDetector
+LCCInput = Input
+LCCSignal = Signal
+LCCSignalMast = SignalMast
+LCCOutput = Output
+LCCLight = Light

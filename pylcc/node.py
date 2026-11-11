@@ -267,3 +267,8 @@ class Node:
     async def send_datagram(self, dest_alias: int, data: bytes, timeout_ms: int = 3000) -> bool:
         """Send a datagram to target node alias."""
         return await self.datagram_manager.send_datagram(dest_alias, data, timeout_ms=timeout_ms)
+
+
+# Alias for explicit LCC layout naming and namespace collision prevention
+LCCNode = Node
+

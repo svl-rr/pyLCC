@@ -25,24 +25,24 @@ With `pyLCC`, creating a full-featured OpenLCB node with turnout control, block 
 
 ```python
 import asyncio
-from pylcc import Node, Turnout, Sensor
+from pylcc import LCCNode, LCCTurnout, LCCSensor
 from pylcc.transport import GridConnectTcpClient
 
 async def main():
     # 1. Connect to JMRI or an LCC WiFi hub via GridConnect TCP
     transport = GridConnectTcpClient("192.168.1.100", 12021)
 
-    # 2. Instantiate node orchestrator
-    node = Node(node_id="05.01.01.01.14.01", transport=transport)
+    # 2. Instantiate node orchestrator (supports LCCNode or Node)
+    node = LCCNode(node_id="05.01.01.01.14.01", transport=transport)
 
-    # 3. Attach layout components (with custom hardware hooks)
-    turnout = Turnout(
+    # 3. Attach layout components (LCCTurnout/Turnout, LCCSensor/Sensor)
+    turnout = LCCTurnout(
         name="Mainline Turnout",
         close_event="05.01.01.01.14.01.00.01",
         throw_event="05.01.01.01.14.01.00.02",
         on_change=lambda state: print(f"Turnout moved: {state}")
     )
-    sensor = Sensor(
+    sensor = LCCSensor(
         name="Block 1 Detector",
         active_event="05.01.01.01.14.01.00.10",
         inactive_event="05.01.01.01.14.01.00.11",
@@ -111,11 +111,11 @@ asyncio.run(main())
   - Single-task sequential frame dispatch loop cutting MicroPython Task heap allocations by 75%.
   - Automatic CDI generation: Auto-creates CDI schema from registered components if no explicit document is supplied.
   - Broadcasts `Initialization Complete` (`0x0100`) upon acquiring CAN alias.
-- **Pluggable Component Reference Stubs**:
-  - **`Turnout`**: Consumes Close/Throw events; produces feedback; hooks into `on_change`.
-  - **`Sensor` / `BlockDetector` / `Input`**: Produces Active/Inactive events; responds to Identify Producer queries.
-  - **`Signal` / `SignalMast`**: Consumes aspect events (`STOP`, `APPROACH`, `CLEAR`, etc.); notifies via `on_aspect_change`.
-  - **`Output` / `Light`**: Consumes discrete On/Off commands; hooks into `on_change`.
+- **Pluggable Component Reference Stubs (supports `LCC*` prefixes to prevent collisions with user drivers)**:
+  - **`LCCTurnout` / `Turnout`**: Consumes Close/Throw events; produces feedback; hooks into `on_change`.
+  - **`LCCSensor` / `Sensor` / `LCCBlockDetector`**: Produces Active/Inactive events; responds to Identify Producer queries.
+  - **`LCCSignal` / `Signal` / `LCCSignalMast`**: Consumes aspect events (`STOP`, `APPROACH`, `CLEAR`, etc.); notifies via `on_aspect_change`.
+  - **`LCCOutput` / `Output` / `LCCLight`**: Consumes discrete On/Off commands; hooks into `on_change`.
 
 ---
 
@@ -126,7 +126,7 @@ The project includes a comprehensive test suite covering all layers:
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **56 automated tests (100% passing)**.*
+*Current test suite: **57 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All core modules are verified to compile cleanly with `mpy-cross` without desktop-only dependencies:

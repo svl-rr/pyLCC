@@ -63,7 +63,7 @@ from .cdi import (
     CdiInt,
     CdiString,
 )
-from .node import Node
+from .node import Node, LCCNode
 from .components import (
     BaseComponent,
     Turnout,
@@ -74,6 +74,14 @@ from .components import (
     SignalMast,
     Output,
     Light,
+    LCCTurnout,
+    LCCSensor,
+    LCCBlockDetector,
+    LCCInput,
+    LCCSignal,
+    LCCSignalMast,
+    LCCOutput,
+    LCCLight,
 )
 
 __version__ = "0.1.0"
@@ -135,6 +143,7 @@ __all__ = [
     "CdiInt",
     "CdiString",
     "Node",
+    "LCCNode",
     "BaseComponent",
     "Turnout",
     "Sensor",
@@ -144,4 +153,12 @@ __all__ = [
     "SignalMast",
     "Output",
     "Light",
+    "LCCTurnout",
+    "LCCSensor",
+    "LCCBlockDetector",
+    "LCCInput",
+    "LCCSignal",
+    "LCCSignalMast",
+    "LCCOutput",
+    "LCCLight",
 ]

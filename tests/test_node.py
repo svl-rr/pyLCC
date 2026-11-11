@@ -15,7 +15,12 @@ from pylcc.components import (
     Sensor,
     Signal,
     Output,
+    LCCTurnout,
+    LCCSensor,
+    LCCSignal,
+    LCCOutput,
 )
+from pylcc.node import Node, LCCNode
 
 
 class TestNodeAndComponents(unittest.IsolatedAsyncioTestCase):
@@ -208,6 +213,22 @@ class TestNodeAndComponents(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(cdi_space)
         data = cdi_space.read(0, 32)
         self.assertTrue(data.startswith(b"<?xml"))
+
+    def test_lcc_prefixed_aliases(self):
+        """Verify LCC-prefixed aliases are identical to base classes."""
+        self.assertIs(LCCNode, Node)
+        self.assertIs(LCCTurnout, Turnout)
+        self.assertIs(LCCSensor, Sensor)
+        self.assertIs(LCCSignal, Signal)
+        self.assertIs(LCCOutput, Output)
+
+        # Test instantiating with LCC prefix
+        node = LCCNode("05.01.01.01.14.01", self.t1)
+        self.assertIsInstance(node, Node)
+        t = LCCTurnout("Turnout A", close_event="05.01.01.01.14.01.00.01", throw_event="05.01.01.01.14.01.00.02")
+        self.assertIsInstance(t, Turnout)
+        s = LCCSensor("Sensor A", active_event="05.01.01.01.14.01.00.10", inactive_event="05.01.01.01.14.01.00.11")
+        self.assertIsInstance(s, Sensor)
 
 
 if __name__ == "__main__":
