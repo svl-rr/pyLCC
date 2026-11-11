@@ -42,6 +42,27 @@ from .snip import (
     PIP_SNIP,
     PIP_CDI,
 )
+from .memory import (
+    MemorySpace,
+    BytesMemorySpace,
+    ConfigMemorySpace,
+    MemoryConfigurationService,
+    DATAGRAM_PROTOCOL_MEMORY_CONFIG,
+    SPACE_CDI,
+    SPACE_ALL_MEMORY,
+    SPACE_CONFIG,
+    SPACE_ACDI_MFG,
+    SPACE_ACDI_USER,
+)
+from .cdi import (
+    CdiDocument,
+    CdiSegment,
+    CdiGroup,
+    CdiItem,
+    CdiEventID,
+    CdiInt,
+    CdiString,
+)
 
 __version__ = "0.1.0"
 __all__ = [
@@ -81,4 +102,21 @@ __all__ = [
     "PIP_EVENT_EXCHANGE",
     "PIP_SNIP",
     "PIP_CDI",
+    "MemorySpace",
+    "BytesMemorySpace",
+    "ConfigMemorySpace",
+    "MemoryConfigurationService",
+    "DATAGRAM_PROTOCOL_MEMORY_CONFIG",
+    "SPACE_CDI",
+    "SPACE_ALL_MEMORY",
+    "SPACE_CONFIG",
+    "SPACE_ACDI_MFG",
+    "SPACE_ACDI_USER",
+    "CdiDocument",
+    "CdiSegment",
+    "CdiGroup",
+    "CdiItem",
+    "CdiEventID",
+    "CdiInt",
+    "CdiString",
 ]

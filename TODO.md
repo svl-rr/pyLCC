@@ -10,7 +10,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 - [x] **Step 2: CAN Alias Allocation Protocol**
 - [x] **Step 3: Event Transport Protocol (Producer / Consumer Model)**
 - [x] **Step 4: Datagram Transport & SNIP Engine**
-- [ ] **Step 5: Memory Configuration Protocol & CDI XML**
+- [x] **Step 5: Memory Configuration Protocol & CDI XML**
 - [ ] **Step 6: High-Level Node Abstraction & Application API**
 - [ ] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
 - [ ] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
@@ -59,9 +59,22 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - `SnipData` model and encoder/decoder (Manufacturer, Model, Hardware/Software versions, User Name & Description).
   - `SnipService`: Streams SNIP reply frames (`0x0A08`) in response to `0x0DE8`.
   - Protocol Support Inquiry (`PIP` - `0x0828`) handler replying with capability bitmask (`0x0668`).
+- [x] **Memory Configuration Protocol & CDI XML (`pylcc.memory`, `pylcc.cdi`) (S-9.7.4.2 / S-9.7.4.1)**
+  - `MemorySpace`, `BytesMemorySpace`, and `ConfigMemorySpace` storage backends.
+  - Configuration Datagram (0x20) handler (`MemoryConfigurationService`):
+    - Memory Read (`0x40` generic, `0x41` CDI, `0x42` All-Memory, `0x43` Config) $\to$ Read Replies (`0x50`, `0x51`, `0x52`, `0x53`) and Failure (`0x58`).
+    - Memory Write (`0x00` generic, `0x03` Config) $\to$ Write Replies (`0x10`, `0x13`) and Failure (`0x18`).
+    - Get Configuration Options (`0x80`) $\to$ Options Reply (`0x82`).
+    - Get Space Info (`0x84`) $\to$ Space Info Reply (`0x86`).
+    - Node Restart / Reset Command (`0xA8`) with async callback trigger.
+  - Pure MicroPython Programmatic CDI XML Generator (`CdiDocument`, `CdiSegment`, `CdiGroup`, `CdiInt`, `CdiString`, `CdiEventID`):
+    - Generates valid XML conforming to schema `http://openlcb.org/schema/cdi/1/1/cdi.xsd`.
+    - Auto-calculates memory offsets for elements across segments and replicated groups.
+    - Generates initial default binary memory images and instantiates pre-populated `ConfigMemorySpace` with flash file persistence.
+    - Exports null-terminated UTF-8 byte stream required by JMRI.
 - [x] **Validation & Tooling**
-  - 40 automated unit tests (100% passing).
-  - MicroPython bytecode compilation verified via `mpy-cross`.
+  - 50 automated unit tests (100% passing).
+  - MicroPython bytecode compilation verified via `mpy-cross` across all modules.
 
 ---
 
@@ -81,27 +94,6 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
 - [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
   - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
-
----
-
-### Step 5: Memory Configuration Protocol & CDI XML
-- [ ] **Memory Configuration Protocol (`pylcc.memory`) (S-9.7.3.3 / S-9.7.3.5)**
-  - [ ] Configuration Datagram decoding & dispatch:
-    - Memory Read Command $\to$ Read Reply (streaming requested byte range).
-    - Memory Write Command $\to$ Write Reply (updating configuration memory).
-    - Configuration Options / Space Info Queries.
-    - Node Restart / Reset Command.
-  - [ ] Standard Address Spaces:
-    - Space `0xFF`: CDI XML (Configuration Description Information, read-only).
-    - Space `0xFD`: Configuration Memory (non-volatile flash storage for user settings & event IDs).
-    - Space `0xFC`: ACDI (Abbreviated Configuration Description Information).
-    - Space `0xFE`: All-memory / firmware space.
-- [ ] **CDI XML Generator & Flash Storage (`pylcc.cdi`)**
-  - [ ] CDI XML generation / template engine:
-    - Defines segments, groups, sliders, event ID configuration inputs, turnout/sensor mapping.
-  - [ ] Flash persistence:
-    - Reading and writing configuration data to `config.bin` in MicroPython `LittleFS`.
-    - Factory reset default values.
 
 ---
 
