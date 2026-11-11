@@ -1,0 +1,144 @@
+# pyLCC Project Roadmap & TODO List
+
+A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for MicroPython and Python.
+
+---
+
+## Progress Overview
+
+- [x] **Step 1: Frame & Transport Abstraction**
+- [x] **Step 2: CAN Alias Allocation Protocol**
+- [x] **Step 3: Event Transport Protocol (Producer / Consumer Model)**
+- [ ] **Step 4: Datagram Transport & SNIP Engine**
+- [ ] **Step 5: Memory Configuration Protocol & CDI XML**
+- [ ] **Step 6: High-Level Node Abstraction & Application API**
+- [ ] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
+- [ ] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
+
+---
+
+## Detailed Task Breakdown
+
+### Completed Work
+
+- [x] **CAN Frame Model (`pylcc.can.CanFrame`)**
+  - 29-bit extended identifier bitfield extraction (`source_alias`, `variable_field`, `mti`, `is_addressed`, `destination_alias`).
+  - Constructors for CAN Control frames (`CID`, `RID`, `AMD`, `AME`, `AMR`).
+  - Constructors for OpenLCB Message frames (Global & Addressed).
+- [x] **GridConnect Protocol (`pylcc.gridconnect`)**
+  - Frame encoder (`:X195B422AN...;`).
+  - Strict validator & decoder.
+  - Streaming parser (`GridConnectParser`) handling partial chunks, corrupted data, and multiple frames per read.
+- [x] **Transport Layer (`pylcc.transport`)**
+  - `BaseTransport`: Common async send/receive interface with listener hooks.
+  - `LoopbackTransport` & `LoopbackBus`: Fast in-memory bus for offline automated testing.
+  - `GridConnectTcpClient`: Asynchronous TCP client for WiFi/Ethernet connections to JMRI or LCC Hubs.
+  - `GridConnectTcpServer`: Standalone TCP hub for multi-client connections.
+- [x] **Node ID & PRNG (`pylcc.node_id`, `pylcc.alias`)**
+  - 48-bit `NodeID` model with 12-bit CID chunking (`chunk_7` through `chunk_4`).
+  - Heidi G. Kuehn (1961) 48-bit Linear Congruential PRNG specified in OpenLCB **TN-9.7.2.1**.
+  - `AliasManager` state machine (`INHIBITED` $\to$ `CHECKING` $\to$ `PERMITTED`).
+  - 100 ms conflict observation timer and back-off retry on collision.
+  - Active defense transmitting `RID` against newcomers probing with `CID`.
+  - Handling of `AME` queries and release with `AMR`.
+- [x] **Event Transport (`pylcc.event_id`, `pylcc.events`)**
+  - 64-bit `EventID` model with `EventID.from_node_id(node_id, index)`.
+  - `EventManager` for registering local consumers (with sync/async callbacks) and producers.
+  - Broadcasting Producer/Consumer Event Reports (`PCER` - `0x05B4`).
+  - Automatic query responses for:
+    - Identify Consumer (`0x08F4`) $\to$ `Consumer Identified` (`0x04C4`/`0x04C5`/`0x04C7`).
+    - Identify Producer (`0x0914`) $\to$ `Producer Identified` (`0x0544`/`0x0545`/`0x0547`).
+    - Identify Events Global (`0x0976`) & Addressed (`0x0968`) $\to$ full event enumeration.
+- [x] **Validation & Tooling**
+  - 33 automated unit tests (100% passing).
+  - MicroPython bytecode compilation verified via `mpy-cross`.
+  - Initialized git repository synchronized with GitHub.
+
+---
+
+### Remaining Work
+
+### Step 4: Datagram Transport & SNIP Engine
+- [ ] **Datagram Transport Protocol (`pylcc.datagram`) (NMRA Standard S-9.7.3.2 / S-9.7.2.1)**
+  - [ ] CAN fragmentation & reassembly for payloads up to 72 bytes across 8-byte CAN frames.
+  - [ ] Frame format handling:
+    - Datagram Only (single-frame datagrams).
+    - Datagram First Frame, Middle Frame, Final Frame.
+  - [ ] Flow Control:
+    - `Datagram Received OK` (`0x0A28` / `0x0A48`) ACK response.
+    - `Datagram Rejected` (`0x0A48`) NAK with error code (buffer full, temporary reject, permanent reject).
+  - [ ] Sender queue with timeout handling and retransmission.
+- [ ] **SNIP Service (`pylcc.snip`) (Simple Node Information Protocol - S-9.7.3.4)**
+  - [ ] Fixed node identification strings:
+    - Manufacturer Name (e.g. `"svl-rr"`).
+    - Node Model (e.g. `"pyLCC-ESP32C6"`).
+    - Hardware Version (e.g. `"v1.0"`).
+    - Software Version (e.g. `"pyLCC 0.1.0"`).
+  - [ ] User-configurable strings:
+    - User Node Name.
+    - User Node Description.
+  - [ ] Handling `Simple Node Ident Info Request` (`0x0DE8`) and streaming `Simple Node Ident Info Reply` (`0x0A08`).
+
+---
+
+### Step 5: Memory Configuration Protocol & CDI XML
+- [ ] **Memory Configuration Protocol (`pylcc.memory`) (S-9.7.3.3 / S-9.7.3.5)**
+  - [ ] Configuration Datagram decoding & dispatch:
+    - Memory Read Command $\to$ Read Reply (streaming requested byte range).
+    - Memory Write Command $\to$ Write Reply (updating configuration memory).
+    - Configuration Options / Space Info Queries.
+    - Node Restart / Reset Command.
+  - [ ] Standard Address Spaces:
+    - Space `0xFF`: CDI XML (Configuration Description Information, read-only).
+    - Space `0xFD`: Configuration Memory (non-volatile flash storage for user settings & event IDs).
+    - Space `0xFC`: ACDI (Abbreviated Configuration Description Information).
+    - Space `0xFE`: All-memory / firmware space.
+- [ ] **CDI XML Generator & Flash Storage (`pylcc.cdi`)**
+  - [ ] CDI XML generation / template engine:
+    - Defines segments, groups, sliders, event ID configuration inputs, turnout/sensor mapping.
+  - [ ] Flash persistence:
+    - Reading and writing configuration data to `config.bin` in MicroPython `LittleFS`.
+    - Factory reset default values.
+
+---
+
+### Step 6: Core Node Abstraction & High-Level API
+- [ ] **Unified `Node` Class (`pylcc.node`)**
+  - [ ] Encapsulate transport, alias manager, event manager, datagram manager, SNIP, and memory config into a single cohesive class:
+    ```python
+    node = Node(node_id="05.01.01.01.14.01", transport=transport)
+    await node.start()
+    ```
+- [ ] **High-Level Layout Component Helpers (`pylcc.components`)**
+  - [ ] `Turnout`: Handles Thrown / Closed event consumption and feedback event production.
+  - [ ] `BlockDetector`: Debounced block occupancy sensor triggering Occupied / Cleared events.
+  - [ ] `PushButton`: Momentary push button producing configured events.
+  - [ ] `SignalMast`: Multi-aspect signal mast consuming aspect events.
+
+---
+
+### Step 7: Hardware CAN Drivers (Target Platforms)
+- [ ] **STM32 Native CAN Driver (`pylcc.hardware.stm32_can`)**
+  - [ ] Direct interface to STM32 on-chip CAN / FDCAN peripheral via MicroPython's `pyb.CAN` / `machine.CAN`.
+  - [ ] Configure 125 kbps bitrate, 29-bit extended filters, and non-blocking RX/TX loops.
+- [ ] **ESP32-C6 Native TWAI Driver (`pylcc.hardware.esp32_twai`)**
+  - [ ] ESP32-C6 built-in TWAI (Classical CAN 2.0B) driver interface with external 3.3V transceiver.
+  - [ ] Pin configuration (TX/RX GPIO) and interrupt/async polling.
+- [ ] **Raspberry Pi Pico (RP2040 / RP2350) MCP2517FD / MCP2518FD Driver (`pylcc.hardware.mcp2518fd`)**
+  - [ ] High-speed SPI driver (up to 20 MHz) for the MCP2517FD / MCP2518FD external controller.
+  - [ ] 31-message deep FIFO configuration to ensure zero dropped packets during 125 kbps bus bursts.
+
+---
+
+### Step 8: Integration, Testing & Packaging
+- [ ] **JMRI End-to-End Validation**
+  - [ ] Test node discovery in JMRI OpenLCB Network Tree.
+  - [ ] Configure node parameters using JMRI DecoderPro CDI Tool.
+  - [ ] Test Turnout and Sensor table integration with live event updates.
+- [ ] **Hardware Wiring Diagrams & Documentation**
+  - [ ] ESP32-C6 + SN65HVD230 transceiver pinout.
+  - [ ] Raspberry Pi Pico + MCP2518FD SPI breakout pinout.
+  - [ ] STM32 CAN transceiver connection guide.
+- [ ] **Distribution & Packaging**
+  - [ ] `pyproject.toml` for standard `pip` installation on desktop Python.
+  - [ ] `package.json` manifest for MicroPython `mip` installation directly from GitHub.
