@@ -67,26 +67,20 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 
 ### Remaining Work
 
-### Step 4: Datagram Transport & SNIP Engine
-- [ ] **Datagram Transport Protocol (`pylcc.datagram`) (NMRA Standard S-9.7.3.2 / S-9.7.2.1)**
-  - [ ] CAN fragmentation & reassembly for payloads up to 72 bytes across 8-byte CAN frames.
-  - [ ] Frame format handling:
-    - Datagram Only (single-frame datagrams).
-    - Datagram First Frame, Middle Frame, Final Frame.
-  - [ ] Flow Control:
-    - `Datagram Received OK` (`0x0A28` / `0x0A48`) ACK response.
-    - `Datagram Rejected` (`0x0A48`) NAK with error code (buffer full, temporary reject, permanent reject).
-  - [ ] Sender queue with timeout handling and retransmission.
-- [ ] **SNIP Service (`pylcc.snip`) (Simple Node Information Protocol - S-9.7.3.4)**
-  - [ ] Fixed node identification strings:
-    - Manufacturer Name (e.g. `"svl-rr"`).
-    - Node Model (e.g. `"pyLCC-ESP32C6"`).
-    - Hardware Version (e.g. `"v1.0"`).
-    - Software Version (e.g. `"pyLCC 0.1.0"`).
-  - [ ] User-configurable strings:
-    - User Node Name.
-    - User Node Description.
-  - [ ] Handling `Simple Node Ident Info Request` (`0x0DE8`) and streaming `Simple Node Ident Info Reply` (`0x0A08`).
+### Optimizations & MicroPython Tuning (Performance & Memory)
+- [ ] **Zero-Allocation Event Filtering (`pylcc/events.py`)**:
+  - Filter incoming PCER event reports using fast 64-bit integer set lookups before instantiating `EventID` objects.
+  - Prevents heap allocations for unconsumed layout events on busy buses.
+- [ ] **C-Speed Hex Conversion (`pylcc/gridconnect.py`)**:
+  - Utilize built-in `ubinascii.hexlify` and `unhexlify` (or `bytes.fromhex`) to bypass Python character loops and generator overhead during frame encoding/decoding.
+- [ ] **Byte-Level Delimiter Scanning in `GridConnectParser` (`pylcc/gridconnect.py`)**:
+  - Replace per-character string decoding and list appending with a pre-allocated `bytearray` buffer and C-speed delimiter search (`find(b":")` / `find(b";")`).
+- [ ] **Bitwise Header Unpacking Without Slices (`pylcc/can.py`)**:
+  - Replace `self.data[:2]` byte slicing in `destination_alias` with direct integer bit arithmetic (`((self.data[0] << 8) | self.data[1]) & 0x0FFF`) to eliminate temporary slice allocations.
+- [ ] **Cached Immutable Byte Serializations (`pylcc/node_id.py`, `pylcc/event_id.py`)**:
+  - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
+- [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
+  - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
 
 ---
 
