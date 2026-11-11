@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.mpy
+.pytest_cache/
+.coverage
+.env
+.venv
+env/
+venv/
+.DS_Store
+resume
