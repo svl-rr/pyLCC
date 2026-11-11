@@ -57,6 +57,8 @@ class CdiEventID(CdiItem):
             lines.append(f"{pad2}<name>{_escape_xml(self.name)}</name>")
         if self.description:
             lines.append(f"{pad2}<description>{_escape_xml(self.description)}</description>")
+        if self.default and self.default.value != 0:
+            lines.append(f"{pad2}<default>{self.default}</default>")
         lines.append(f"{pad}</eventid>")
         return "\n".join(lines)
 

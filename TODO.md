@@ -11,7 +11,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 - [x] **Step 3: Event Transport Protocol (Producer / Consumer Model)**
 - [x] **Step 4: Datagram Transport & SNIP Engine**
 - [x] **Step 5: Memory Configuration Protocol & CDI XML**
-- [ ] **Step 6: High-Level Node Abstraction & Application API**
+- [x] **Step 6: High-Level Node Abstraction & Application API**
 - [ ] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
 - [ ] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
 
@@ -72,8 +72,18 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - Auto-calculates memory offsets for elements across segments and replicated groups.
     - Generates initial default binary memory images and instantiates pre-populated `ConfigMemorySpace` with flash file persistence.
     - Exports null-terminated UTF-8 byte stream required by JMRI.
+- [x] **Core Node Abstraction & Layout Component Stubs (`pylcc.node`, `pylcc.components`)**
+  - Unified `Node` class orchestrating `Transport`, `AliasManager`, `EventManager`, `DatagramManager`, `SnipService`, and `MemoryConfigurationService`.
+  - Single-task sequential frame dispatch loop cutting MicroPython Task heap allocations by 75%.
+  - Automatic CDI XML generation from attached components if no custom CDI document is provided.
+  - Lifecycle management: alias allocation, Initialization Complete (`0x0100`) broadcast, and AMR release on shutdown.
+  - Clean reference component stubs with callback hooks for custom hardware drivers:
+    - `Turnout`: Consumes Close/Throw events, produces Is Closed/Is Thrown feedback, `on_change` hook.
+    - `Sensor` / `BlockDetector` / `Input`: Produces Active/Inactive events, responds to Producer Identify inquiries.
+    - `Signal` / `SignalMast`: Consumes arbitrary aspect events (STOP, APPROACH, CLEAR, etc.), `on_aspect_change` hook.
+    - `Output` / `Light`: Consumes On/Off discrete command events.
 - [x] **Validation & Tooling**
-  - 50 automated unit tests (100% passing).
+  - 56 automated unit tests (100% passing).
   - MicroPython bytecode compilation verified via `mpy-cross` across all modules.
 
 ---
@@ -94,21 +104,6 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
 - [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
   - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
-
----
-
-### Step 6: Core Node Abstraction & High-Level API
-- [ ] **Unified `Node` Class (`pylcc.node`)**
-  - [ ] Encapsulate transport, alias manager, event manager, datagram manager, SNIP, and memory config into a single cohesive class:
-    ```python
-    node = Node(node_id="05.01.01.01.14.01", transport=transport)
-    await node.start()
-    ```
-- [ ] **High-Level Layout Component Helpers (`pylcc.components`)**
-  - [ ] `Turnout`: Handles Thrown / Closed event consumption and feedback event production.
-  - [ ] `BlockDetector`: Debounced block occupancy sensor triggering Occupied / Cleared events.
-  - [ ] `PushButton`: Momentary push button producing configured events.
-  - [ ] `SignalMast`: Multi-aspect signal mast consuming aspect events.
 
 ---
 

@@ -44,6 +44,9 @@ class EventID:
     def value(self) -> int:
         return self._value
 
+    def __int__(self) -> int:
+        return self._value
+
     def to_bytes(self) -> bytes:
         """Return Event ID as 8 big-endian bytes."""
         return self._value.to_bytes(8, "big")
