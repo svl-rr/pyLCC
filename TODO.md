@@ -9,7 +9,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 - [x] **Step 1: Frame & Transport Abstraction**
 - [x] **Step 2: CAN Alias Allocation Protocol**
 - [x] **Step 3: Event Transport Protocol (Producer / Consumer Model)**
-- [ ] **Step 4: Datagram Transport & SNIP Engine**
+- [x] **Step 4: Datagram Transport & SNIP Engine**
 - [ ] **Step 5: Memory Configuration Protocol & CDI XML**
 - [ ] **Step 6: High-Level Node Abstraction & Application API**
 - [ ] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
@@ -25,6 +25,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - 29-bit extended identifier bitfield extraction (`source_alias`, `variable_field`, `mti`, `is_addressed`, `destination_alias`).
   - Constructors for CAN Control frames (`CID`, `RID`, `AMD`, `AME`, `AMR`).
   - Constructors for OpenLCB Message frames (Global & Addressed).
+  - First-class Datagram frames (Formats 2, 3, 4, 5: `Only`, `First`, `Middle`, `Final`) and ACK/NAK (`Datagram OK`, `Datagram Rejected`).
 - [x] **GridConnect Protocol (`pylcc.gridconnect`)**
   - Frame encoder (`:X195B422AN...;`).
   - Strict validator & decoder.
@@ -49,10 +50,18 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - Identify Consumer (`0x08F4`) $\to$ `Consumer Identified` (`0x04C4`/`0x04C5`/`0x04C7`).
     - Identify Producer (`0x0914`) $\to$ `Producer Identified` (`0x0544`/`0x0545`/`0x0547`).
     - Identify Events Global (`0x0976`) & Addressed (`0x0968`) $\to$ full event enumeration.
+- [x] **Datagram Transport (`pylcc.datagram`) (NMRA Standard S-9.7.3.2 / S-9.7.2.1)**
+  - Multi-frame fragmentation and reassembly up to 72 bytes across 8-byte CAN frames.
+  - Flow control with automatic `Datagram Received OK` (`0x0A28`) and `Datagram Rejected` (`0x0A48`) NAK with error codes.
+  - Dispatching datagrams by protocol byte to registered handlers.
+  - Asynchronous `send_datagram()` with timeout and ACK confirmation.
+- [x] **Simple Node Information & Protocol Support (`pylcc.snip`) (S-9.7.4.3 / S-9.7.3)**
+  - `SnipData` model and encoder/decoder (Manufacturer, Model, Hardware/Software versions, User Name & Description).
+  - `SnipService`: Streams SNIP reply frames (`0x0A08`) in response to `0x0DE8`.
+  - Protocol Support Inquiry (`PIP` - `0x0828`) handler replying with capability bitmask (`0x0668`).
 - [x] **Validation & Tooling**
-  - 33 automated unit tests (100% passing).
+  - 40 automated unit tests (100% passing).
   - MicroPython bytecode compilation verified via `mpy-cross`.
-  - Initialized git repository synchronized with GitHub.
 
 ---
 

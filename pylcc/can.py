@@ -21,6 +21,12 @@ CONTROL_AMD         = 0x0701  # Alias Map Definition
 CONTROL_AME         = 0x0702  # Alias Mapping Enquiry
 CONTROL_AMR         = 0x0703  # Alias Map Reset
 
+# Datagram CAN Frame Format Types (Bits 28-24 when bits 28-27 are 11)
+FRAME_FORMAT_DATAGRAM_ONLY   = 0x1A000000  # Format 2: Single-frame datagram
+FRAME_FORMAT_DATAGRAM_FIRST  = 0x1B000000  # Format 3: First frame of multi-frame datagram
+FRAME_FORMAT_DATAGRAM_MIDDLE = 0x1C000000  # Format 4: Middle frame of multi-frame datagram
+FRAME_FORMAT_DATAGRAM_FINAL  = 0x1D000000  # Format 5: Final frame of multi-frame datagram
+
 
 class CanFrame:
     """
@@ -130,22 +136,53 @@ class CanFrame:
         """
         return self.is_openlcb_message and bool(self.mti & 0x008)
 
+    # --- Datagram Frame properties (Formats 2, 3, 4, 5) ---
+
+    @property
+    def is_datagram(self) -> bool:
+        """True if frame is a Datagram frame (Only, First, Middle, or Final)."""
+        fmt = (self.can_id >> 24) & 0x1F
+        return fmt in (0x1A, 0x1B, 0x1C, 0x1D)
+
+    @property
+    def is_datagram_only(self) -> bool:
+        """True if single-frame datagram (Format 2)."""
+        return ((self.can_id >> 24) & 0x1F) == 0x1A
+
+    @property
+    def is_datagram_first(self) -> bool:
+        """True if first frame of multi-frame datagram (Format 3)."""
+        return ((self.can_id >> 24) & 0x1F) == 0x1B
+
+    @property
+    def is_datagram_middle(self) -> bool:
+        """True if middle frame of multi-frame datagram (Format 4)."""
+        return ((self.can_id >> 24) & 0x1F) == 0x1C
+
+    @property
+    def is_datagram_final(self) -> bool:
+        """True if final frame of multi-frame datagram (Format 5)."""
+        return ((self.can_id >> 24) & 0x1F) == 0x1D
+
     @property
     def destination_alias(self):
         """
-        12-bit Destination Alias for Addressed OpenLCB Messages.
-        Extracted from the first two bytes of data (fddd format).
-        Returns None if not an addressed message or data is too short.
+        12-bit Destination Alias for Addressed OpenLCB Messages and Datagram frames.
+        For Datagrams: extracted from bits 23-12 of the CAN ID.
+        For Addressed Messages: extracted from first two bytes of data (fddd format).
+        Returns None if not addressed.
         """
-        if not self.is_addressed or len(self.data) < 2:
-            return None
-        return int.from_bytes(self.data[:2], "big") & 0x0FFF
+        if self.is_datagram:
+            return (self.can_id >> VARIABLE_FIELD_SHIFT) & SOURCE_ALIAS_MASK
+        if self.is_addressed and len(self.data) >= 2:
+            return int.from_bytes(self.data[:2], "big") & SOURCE_ALIAS_MASK
+        return None
 
     @property
     def destination_payload(self) -> bytes:
         """
         Data payload stripped of the 2-byte destination alias header for addressed messages.
-        For global messages, returns self.data.
+        For Datagrams or global messages, returns self.data.
         """
         if self.is_addressed and len(self.data) >= 2:
             return self.data[2:]
@@ -238,6 +275,43 @@ class CanFrame:
         )
         data = (dest_alias & SOURCE_ALIAS_MASK).to_bytes(2, "big") + payload
         return cls(can_id, data)
+
+    # --- Constructors for Datagram Frames ---
+
+    @classmethod
+    def make_datagram_only(cls, source_alias: int, dest_alias: int, data: bytes = b"") -> "CanFrame":
+        """Create a single-frame datagram (Format 2: 0x1A). Payload up to 8 bytes."""
+        can_id = FRAME_FORMAT_DATAGRAM_ONLY | ((dest_alias & SOURCE_ALIAS_MASK) << VARIABLE_FIELD_SHIFT) | (source_alias & SOURCE_ALIAS_MASK)
+        return cls(can_id, data)
+
+    @classmethod
+    def make_datagram_first(cls, source_alias: int, dest_alias: int, data: bytes) -> "CanFrame":
+        """Create the first frame of a multi-frame datagram (Format 3: 0x1B). Payload 8 bytes."""
+        can_id = FRAME_FORMAT_DATAGRAM_FIRST | ((dest_alias & SOURCE_ALIAS_MASK) << VARIABLE_FIELD_SHIFT) | (source_alias & SOURCE_ALIAS_MASK)
+        return cls(can_id, data)
+
+    @classmethod
+    def make_datagram_middle(cls, source_alias: int, dest_alias: int, data: bytes) -> "CanFrame":
+        """Create a middle frame of a multi-frame datagram (Format 4: 0x1C). Payload 8 bytes."""
+        can_id = FRAME_FORMAT_DATAGRAM_MIDDLE | ((dest_alias & SOURCE_ALIAS_MASK) << VARIABLE_FIELD_SHIFT) | (source_alias & SOURCE_ALIAS_MASK)
+        return cls(can_id, data)
+
+    @classmethod
+    def make_datagram_final(cls, source_alias: int, dest_alias: int, data: bytes) -> "CanFrame":
+        """Create the final frame of a multi-frame datagram (Format 5: 0x1D). Payload up to 8 bytes."""
+        can_id = FRAME_FORMAT_DATAGRAM_FINAL | ((dest_alias & SOURCE_ALIAS_MASK) << VARIABLE_FIELD_SHIFT) | (source_alias & SOURCE_ALIAS_MASK)
+        return cls(can_id, data)
+
+    @classmethod
+    def make_datagram_ok(cls, source_alias: int, dest_alias: int, reply_pending: bool = False) -> "CanFrame":
+        """Create a Datagram Received OK (ACK) addressed message (MTI 0x0A28)."""
+        flags = b"\x80" if reply_pending else b"\x00"
+        return cls.make_addressed_message(0x0A28, source_alias, dest_alias, flags)
+
+    @classmethod
+    def make_datagram_rejected(cls, source_alias: int, dest_alias: int, error_code: int = 0x1000) -> "CanFrame":
+        """Create a Datagram Rejected (NAK) addressed message (MTI 0x0A48) with 16-bit error code."""
+        return cls.make_addressed_message(0x0A48, source_alias, dest_alias, error_code.to_bytes(2, "big"))
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, CanFrame):

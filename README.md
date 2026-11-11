@@ -78,6 +78,26 @@ A lightweight, modular **OpenLCB / NMRA LCC (Layout Command Control)** protocol 
 
 ---
 
+## Step 4 Completed: Datagram Transport & SNIP Engine
+
+- **Datagram Transport Protocol (`pylcc.datagram`) (NMRA S-9.7.3.2 / S-9.7.2.1)**:
+  - Fragmentation and reassembly for payloads up to 72 bytes across 8-byte CAN frames.
+  - Full support for Datagram frame types:
+    - **Datagram Only** (`0x1A`)
+    - **Datagram First** (`0x1B`)
+    - **Datagram Middle** (`0x1C`)
+    - **Datagram Final** (`0x1D`)
+  - Flow Control:
+    - Automatic `Datagram Received OK` (`0x0A28`) ACK.
+    - `Datagram Rejected` (`0x0A48`) NAK with error code.
+  - Asynchronous `send_datagram(dest_alias, data)` with automatic timeout and ACK resolution.
+- **SNIP & Protocol Identification (`pylcc.snip`) (NMRA S-9.7.4.3 / S-9.7.3)**:
+  - `SnipData`: Stores Manufacturer, Model, Hardware/Software versions, and User Name & Description.
+  - `SnipService`: Responds to **Simple Node Ident Info Request** (`0x0DE8`) by streaming the serialized description via **Simple Node Ident Info Reply** (`0x0A08`).
+  - **Protocol Support Inquiry (PIP)**: Responds to `0x0828` with the 24-bit protocol capability flags via `0x0668`.
+
+---
+
 ## Running the Unit Tests
 
 ```bash
