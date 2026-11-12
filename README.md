@@ -146,8 +146,21 @@ python3 examples/mock_lcc_hub.py 127.0.0.1 12021
 ```
 
 ### 2. Connect an OpenLCB Traffic Monitor:
+Decodes Alias allocation, Event PCERs, Datagrams, SNIP node queries, and PIP capability replies in real time:
 ```bash
 python3 examples/gridconnect_tcp_monitor.py 127.0.0.1 12021
+```
+
+### 3. Launch a Virtual Turnout & Sensor Node:
+Demonstrates `LCCNode` with `LCCTurnout` and `LCCSensor`, automatic CDI generation, and periodic block occupancy simulation:
+```bash
+python3 examples/virtual_turnout_node.py 127.0.0.1 12021
+```
+
+### 4. Run the Full Interactive JMRI / Multi-I/O Node:
+Features Turnouts, Track Sensors, a 3-Aspect Signal Mast, Yard Lighting, and custom CDI XML with configurable servo speeds and debounce delays:
+```bash
+python3 examples/jmri_interactive_node.py 127.0.0.1 12021
 ```
 
 ---
