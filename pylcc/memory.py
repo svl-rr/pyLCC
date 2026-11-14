@@ -60,6 +60,12 @@ CMD_GET_SPACE_INFO       = const(0x84)  # Get Space Info Request
 CMD_SPACE_INFO_REPLY     = const(0x86)  # Space Info Reply
 CMD_RESTART              = const(0xA8)  # Reboot / Restart Node
 
+_MEMORY_REPLY_CMDS = (
+    0x10, 0x11, 0x12, 0x13, 0x18,
+    0x50, 0x51, 0x52, 0x53, 0x58,
+    0x82, 0x86,
+)
+
 
 class MemorySpace:
     """Base class for an addressable memory space on an OpenLCB node."""
@@ -435,6 +441,10 @@ class MemoryConfigurationService:
                         asyncio.create_task(res)
                 except Exception:
                     pass
+            return True
+
+        # 6. Incoming Memory Configuration Replies (ACK without echoing NAK)
+        elif cmd in _MEMORY_REPLY_CMDS:
             return True
 
         return False

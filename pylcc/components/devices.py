@@ -69,6 +69,19 @@ class Turnout(BaseComponent):
                 state=EVENT_STATE_VALID if self.state == self.STATE_THROWN else EVENT_STATE_INVALID,
             )
 
+    def teardown_events(self):
+        if not self.node:
+            return
+        em = self.node.event_manager
+        if self.close_event:
+            em.unregister_consumer(self.close_event)
+        if self.throw_event:
+            em.unregister_consumer(self.throw_event)
+        if self.is_closed_event:
+            em.unregister_producer(self.is_closed_event)
+        if self.is_thrown_event:
+            em.unregister_producer(self.is_thrown_event)
+
     async def _handle_close_event(self, event_id: EventID):
         await self.set_state(self.STATE_CLOSED, broadcast=True)
 
@@ -166,6 +179,15 @@ class Sensor(BaseComponent):
                 state=EVENT_STATE_INVALID if is_active else EVENT_STATE_VALID,
             )
 
+    def teardown_events(self):
+        if not self.node:
+            return
+        em = self.node.event_manager
+        if self.active_event:
+            em.unregister_producer(self.active_event)
+        if self.inactive_event:
+            em.unregister_producer(self.inactive_event)
+
     @property
     def is_active(self) -> bool:
         return self.state == self.STATE_ACTIVE
@@ -248,6 +270,14 @@ class Signal(BaseComponent):
                 state=EVENT_STATE_VALID if is_current else EVENT_STATE_INVALID,
             )
 
+    def teardown_events(self):
+        if not self.node:
+            return
+        em = self.node.event_manager
+        for event_id in self.aspect_events.values():
+            if event_id:
+                em.unregister_consumer(event_id)
+
     async def set_aspect(self, aspect: str):
         """Change current aspect and notify callbacks."""
         if aspect == self.current_aspect:
@@ -311,6 +341,15 @@ class Output(BaseComponent):
                 self._handle_off_event,
                 state=EVENT_STATE_INVALID if is_on else EVENT_STATE_VALID,
             )
+
+    def teardown_events(self):
+        if not self.node:
+            return
+        em = self.node.event_manager
+        if self.on_event:
+            em.unregister_consumer(self.on_event)
+        if self.off_event:
+            em.unregister_consumer(self.off_event)
 
     async def _handle_on_event(self, eid: EventID):
         await self.set_on(True)

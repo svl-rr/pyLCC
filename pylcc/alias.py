@@ -159,7 +159,7 @@ class AliasManager:
                     # A newcomer is checking our claimed alias! Defend it with RID.
                     rid_frame = CanFrame.make_rid(self.alias)
                     await self.transport.send_frame(rid_frame)
-                elif frame.is_amd or frame.is_openlcb_message:
+                elif frame.is_amd or frame.is_openlcb_message or frame.is_datagram:
                     # Collision with an active node! Release alias and reallocate.
                     amr_frame = CanFrame.make_amr(self.alias, self.node_id.to_bytes())
                     await self.transport.send_frame(amr_frame)

@@ -28,6 +28,8 @@ CONTROL_AME         = const(0x0702)  # Alias Mapping Enquiry
 CONTROL_AMR         = const(0x0703)  # Alias Map Reset
 
 # Datagram CAN Frame Format Types (Bits 28-24 when bits 28-27 are 11)
+FRAME_FORMAT_MASK            = const(0x1F000000)  # Bits 28-24: CAN Frame Format field
+FRAME_FORMAT_MESSAGE         = const(0x19000000)  # Format 1: Global / Addressed OpenLCB Message
 FRAME_FORMAT_DATAGRAM_ONLY   = const(0x1A000000)  # Format 2: Single-frame datagram
 FRAME_FORMAT_DATAGRAM_FIRST  = const(0x1B000000)  # Format 3: First frame of multi-frame datagram
 FRAME_FORMAT_DATAGRAM_MIDDLE = const(0x1C000000)  # Format 4: Middle frame of multi-frame datagram
@@ -73,8 +75,8 @@ class CanFrame:
 
     @property
     def is_openlcb_message(self) -> bool:
-        """True if bit 28=1 and bit 27=1 (OpenLCB message frame)."""
-        return (self.can_id & (OPENLCB_CAN_FRAME_FLAG | FRAME_TYPE_MASK)) == (OPENLCB_CAN_FRAME_FLAG | FRAME_TYPE_MASK)
+        """True if bit 28=1, bit 27=1, and CAN Frame Type (bits 26-24) == 1 (0x19xxxxxx)."""
+        return (self.can_id & FRAME_FORMAT_MASK) == FRAME_FORMAT_MESSAGE
 
     @property
     def is_can_control(self) -> bool:

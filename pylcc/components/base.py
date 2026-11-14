@@ -23,6 +23,15 @@ class BaseComponent:
         """Override to register consumers and producers with the node's EventManager."""
         pass
 
+    def teardown_events(self):
+        """Override to unregister consumers and producers from the node's EventManager."""
+        pass
+
+    def rebind_events(self):
+        """Unregister existing events and register updated events with the node."""
+        self.teardown_events()
+        self.setup_events()
+
     async def _notify_change(self, state):
         """Invoke on_change callback if provided."""
         if self.on_change:

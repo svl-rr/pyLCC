@@ -16,6 +16,7 @@
     ["pylcc/transport/__init__.py", "github:svl-rr/pyLCC/pylcc/transport/__init__.py"],
     ["pylcc/transport/base.py", "github:svl-rr/pyLCC/pylcc/transport/base.py"],
     ["pylcc/transport/tcp.py", "github:svl-rr/pyLCC/pylcc/transport/tcp.py"],
+    ["pylcc/transport/serial.py", "github:svl-rr/pyLCC/pylcc/transport/serial.py"],
     ["pylcc/transport/loopback.py", "github:svl-rr/pyLCC/pylcc/transport/loopback.py"],
     ["pylcc/components/__init__.py", "github:svl-rr/pyLCC/pylcc/components/__init__.py"],
     ["pylcc/components/base.py", "github:svl-rr/pyLCC/pylcc/components/base.py"],

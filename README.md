@@ -99,7 +99,7 @@ mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bun
 - **CAN Frame Model (`CanFrame`)**: 29-bit extended identifier bitfield extraction compliant with **NMRA S-9.7.2.1**.
 - **Control Frames**: First-class support for `CID 7..4`, `RID`, `AMD`, `AME`, and `AMR`.
 - **GridConnect Protocol**: ASCII serialization (`:X195B422AN...;`) and streaming parser resilient to packet fragmentation and garbage recovery.
-- **Transports**: `BaseTransport`, `LoopbackTransport` & `LoopbackBus` (for in-memory testing), `GridConnectTcpClient`, and `GridConnectTcpServer`.
+- **Transports**: `BaseTransport`, `LoopbackTransport` & `LoopbackBus` (for in-memory testing), `GridConnectTcpClient`, `GridConnectTcpServer`, and `GridConnectSerialTransport` (USB CDC / TTL UART on MicroPython `machine.UART` or desktop `pyserial`).
 
 ### Step 2: CAN Alias Allocation Protocol (`pylcc.node_id`, `pylcc.alias`)
 - **Node ID Model (`NodeID`)**: 48-bit unique identifier representation (`05.01.01.01.14.00`) with 12-bit CID chunk extraction.
@@ -140,8 +140,9 @@ mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bun
 ### Step 6: Unified Node Orchestrator & Layout Components (`pylcc.node`, `pylcc.components`)
 - **Unified Node (`Node`)**:
   - Orchestrates Transport, Alias, Events, Datagrams, SNIP, Memory Config, and attached components.
+  - Message Network Discovery & Error Handling (**NMRA S-9.7.3**): responds to **Verify Node ID Global/Addressed** (`0x0490` / `0x0488`) with **Verified Node ID** (`0x0170`), and rejects unsupported addressed MTIs with **Optional Interaction Rejected** (`0x0068`).
   - Single-task sequential frame dispatch loop cutting MicroPython Task heap allocations by 75%.
-  - Automatic CDI generation: Auto-creates CDI schema from registered components if no explicit document is supplied.
+  - **Live CDI-to-Component Binding**: Auto-creates CDI schema from registered components, restores saved flash EventIDs/settings on boot, and dynamically rebinds component EventIDs and SNIP user name when Space `0xFD` is edited via JMRI DecoderPro without rebooting.
   - Broadcasts `Initialization Complete` (`0x0100`) upon acquiring CAN alias.
 - **Pluggable Component Reference Stubs (supports `LCC*` prefixes to prevent collisions with user drivers)**:
   - **`LCCTurnout` / `Turnout`**: Consumes Close/Throw events; produces feedback; hooks into `on_change`.
@@ -166,7 +167,7 @@ The project includes a comprehensive test suite covering all protocol layers, ha
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **87 automated tests (100% passing)**.*
+*Current test suite: **95 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All modules are designed for clean compilation with `mpy-cross` without desktop-only dependencies:

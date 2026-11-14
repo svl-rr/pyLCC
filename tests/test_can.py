@@ -40,6 +40,15 @@ class TestCanFrame(unittest.TestCase):
         self.assertFalse(ctrl_frame.is_openlcb_message)
         self.assertTrue(ctrl_frame.is_can_control)
 
+        # Datagram frames (Formats 2..5) must NOT classify as OpenLCB message frames,
+        # even when destination_alias matches an MTI value such as 0xA48 (Datagram Rejected).
+        dgram = CanFrame.make_datagram_only(0x61A, 0xA48, b"\x20\x13")
+        self.assertTrue(dgram.is_openlcb)
+        self.assertTrue(dgram.is_datagram)
+        self.assertFalse(dgram.is_openlcb_message)
+        self.assertEqual(dgram.mti, 0)
+        self.assertEqual(dgram.destination_alias, 0xA48)
+
     def test_cid_frames(self):
         # Test CID 7 through 4
         alias = 0x3AA

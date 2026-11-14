@@ -8,6 +8,12 @@ try:
 except ImportError:
     import uasyncio as asyncio
 
+try:
+    from micropython import const
+except ImportError:
+    def const(x):
+        return x
+
 from .can import CanFrame
 from .node_id import NodeID
 from .event_id import EventID
@@ -30,8 +36,26 @@ from .cdi import CdiDocument
 from .components.base import BaseComponent
 from .components.devices import Turnout, Sensor, Signal, Output
 
-# MTI for Initialization Complete (Simple: 0x0100, Full: 0x0101)
-MTI_INITIALIZATION_COMPLETE = 0x0100
+# Standard OpenLCB Message Network MTIs (NMRA S-9.7.3)
+MTI_INITIALIZATION_COMPLETE       = const(0x0100)
+MTI_VERIFY_NODE_ID_ADDRESSED      = const(0x0488)
+MTI_VERIFY_NODE_ID_GLOBAL         = const(0x0490)
+MTI_VERIFIED_NODE_ID              = const(0x0170)
+MTI_OPTIONAL_INTERACTION_REJECTED = const(0x0068)
+
+# Addressed OpenLCB MTIs handled or explicitly ignored without sending OIR
+_KNOWN_ADDRESSED_MTIS = (
+    0x0488,  # Verify Node ID Addressed
+    0x0828,  # Protocol Support Inquiry
+    0x0668,  # Protocol Support Reply
+    0x0DE8,  # Simple Node Ident Info Request
+    0x0A08,  # Simple Node Ident Info Reply
+    0x0968,  # Identify Events Addressed
+    0x0A28,  # Datagram Received OK
+    0x0A48,  # Datagram Rejected
+    0x0068,  # Optional Interaction Rejected
+    0x00A8,  # Terminate Due to Error
+)
 
 
 class Node:
@@ -81,6 +105,7 @@ class Node:
 
         self.cdi_space = None
         self.config_space = None
+        self._cdi_bindings = []
         if self.cdi_doc:
             self._setup_cdi_spaces(self.cdi_doc)
 
@@ -107,6 +132,7 @@ class Node:
         self.cdi_space = cdi_doc.create_cdi_space()
         self.config_space = cdi_doc.create_config_space(
             filename=self.config_file,
+            on_write=self._on_config_space_write,
             min_size=512,
         )
         self.memory_service.register_space(self.cdi_space)
@@ -126,12 +152,12 @@ class Node:
         """Find an attached component by name."""
         return self._components_by_name.get(name)
 
-    # --- Automatic CDI Generation ---
+    # --- Automatic CDI Generation & Live Binding ---
 
     def auto_generate_cdi(self) -> CdiDocument:
         """
         Generate a CdiDocument from attached components if no custom CDI was provided.
-        Ensures JMRI can discover and configure all node components via CDI.
+        Binds CDI items to components for flash loading and live reconfiguration via Space 0xFD.
         """
         doc = CdiDocument(
             manufacturer=self.snip_data.manufacturer,
@@ -139,49 +165,156 @@ class Node:
             hardware_version=self.snip_data.hardware_version,
             software_version=self.snip_data.software_version,
         )
+        bindings = []
 
         seg = doc.add_segment(space=SPACE_CONFIG, origin=0, name="Configuration", description="Node Settings")
-        seg.add_string("node_desc", name="Description", description="User node description", size=20, default=self.snip_data.user_name)
+        desc_item = seg.add_string(
+            "node_desc",
+            name="Description",
+            description="User node description",
+            size=20,
+            default=self.snip_data.user_name,
+        )
+        bindings.append(("node_desc", desc_item, self.snip_data, "user_name"))
 
-        # Add groups for attached components
+        # Add groups for attached components and record bindings
         for i, comp in enumerate(self.components):
             safe_name = comp.name or f"Component_{i+1}"
             comp_key = f"comp_{i+1}"
 
             if isinstance(comp, Turnout):
                 grp = seg.add_group(comp_key, name=safe_name, description="Turnout Configuration")
-                if comp.close_event:
-                    grp.add_eventid(f"{comp_key}_close", name="Close Event", default=comp.close_event)
-                if comp.throw_event:
-                    grp.add_eventid(f"{comp_key}_throw", name="Throw Event", default=comp.throw_event)
-                if comp.is_closed_event:
-                    grp.add_eventid(f"{comp_key}_is_closed", name="Feedback Closed", default=comp.is_closed_event)
-                if comp.is_thrown_event:
-                    grp.add_eventid(f"{comp_key}_is_thrown", name="Feedback Thrown", default=comp.is_thrown_event)
+                for attr, suffix, label in (
+                    ("close_event", "close", "Close Event"),
+                    ("throw_event", "throw", "Throw Event"),
+                    ("is_closed_event", "is_closed", "Feedback Closed"),
+                    ("is_thrown_event", "is_thrown", "Feedback Thrown"),
+                ):
+                    eid = getattr(comp, attr)
+                    if eid:
+                        item = grp.add_eventid(f"{comp_key}_{suffix}", name=label, default=eid)
+                        bindings.append(("attr_event", item, comp, attr))
 
             elif isinstance(comp, Sensor):
                 grp = seg.add_group(comp_key, name=safe_name, description="Sensor / Detector Configuration")
-                if comp.active_event:
-                    grp.add_eventid(f"{comp_key}_act", name="Active Event", default=comp.active_event)
-                if comp.inactive_event:
-                    grp.add_eventid(f"{comp_key}_inact", name="Inactive Event", default=comp.inactive_event)
+                for attr, suffix, label in (
+                    ("active_event", "act", "Active Event"),
+                    ("inactive_event", "inact", "Inactive Event"),
+                ):
+                    eid = getattr(comp, attr)
+                    if eid:
+                        item = grp.add_eventid(f"{comp_key}_{suffix}", name=label, default=eid)
+                        bindings.append(("attr_event", item, comp, attr))
 
             elif isinstance(comp, Signal):
                 grp = seg.add_group(comp_key, name=safe_name, description="Signal Mast Configuration")
                 for asp_name, asp_eid in comp.aspect_events.items():
-                    grp.add_eventid(f"{comp_key}_{asp_name.lower()}", name=f"Aspect {asp_name}", default=asp_eid)
+                    item = grp.add_eventid(f"{comp_key}_{asp_name.lower()}", name=f"Aspect {asp_name}", default=asp_eid)
+                    bindings.append(("aspect_event", item, comp, asp_name))
 
             elif isinstance(comp, Output):
                 grp = seg.add_group(comp_key, name=safe_name, description="Discrete Output Configuration")
-                if comp.on_event:
-                    grp.add_eventid(f"{comp_key}_on", name="On Event", default=comp.on_event)
-                if comp.off_event:
-                    grp.add_eventid(f"{comp_key}_off", name="Off Event", default=comp.off_event)
+                for attr, suffix, label in (
+                    ("on_event", "on", "On Event"),
+                    ("off_event", "off", "Off Event"),
+                ):
+                    eid = getattr(comp, attr)
+                    if eid:
+                        item = grp.add_eventid(f"{comp_key}_{suffix}", name=label, default=eid)
+                        bindings.append(("attr_event", item, comp, attr))
 
         doc.build()
         self.cdi_doc = doc
+        self._cdi_bindings = bindings
         self._setup_cdi_spaces(doc)
+        self._apply_cdi_config()
         return doc
+
+    def _on_config_space_write(self, offset: int, data: bytes):
+        """Callback invoked on writes to Space 0xFD; applies updated settings live."""
+        self._apply_cdi_config(write_offset=offset, write_len=len(data))
+
+    def _apply_cdi_config(self, write_offset: int = None, write_len: int = None):
+        """Synchronize bound components and SNIP user name from Space 0xFD."""
+        if not self.config_space or not self._cdi_bindings:
+            return
+
+        write_end = (write_offset + write_len) if (write_offset is not None and write_len is not None) else None
+        changed_comps = []
+
+        for kind, item, target, field_name in self._cdi_bindings:
+            offset = item.offset
+            if offset is None:
+                continue
+            if write_end is not None:
+                if offset + item.size <= write_offset or offset >= write_end:
+                    continue
+
+            if kind == "node_desc":
+                new_name = self.config_space.get_string(offset, item.size)
+                if self.snip_data.user_name != new_name:
+                    self.snip_data.user_name = new_name
+            elif kind == "attr_event":
+                new_eid = self.config_space.get_event_id(offset)
+                if getattr(target, field_name) != new_eid:
+                    if target not in changed_comps:
+                        target.teardown_events()
+                        changed_comps.append(target)
+                    setattr(target, field_name, new_eid)
+            elif kind == "aspect_event":
+                new_eid = self.config_space.get_event_id(offset)
+                if target.aspect_events.get(field_name) != new_eid:
+                    if target not in changed_comps:
+                        target.teardown_events()
+                        changed_comps.append(target)
+                    target.aspect_events[field_name] = new_eid
+
+        for comp in changed_comps:
+            comp.setup_events()
+
+    # --- Message Network Discovery & Error Handling ---
+
+    async def _send_verified_node_id(self):
+        """Send global Verified Node ID (0x0170) carrying our 6-byte NodeID."""
+        frame = CanFrame.make_global_message(
+            mti=MTI_VERIFIED_NODE_ID,
+            source_alias=self.alias,
+            data=self.node_id.to_bytes(),
+        )
+        await self.transport.send_frame(frame)
+
+    async def _send_oir(self, dest_alias: int, rejected_mti: int, error_code: int = 0x1000):
+        """Send addressed Optional Interaction Rejected (0x0068) per NMRA S-9.7.3."""
+        payload = bytes((
+            (error_code >> 8) & 0xFF,
+            error_code & 0xFF,
+            (rejected_mti >> 8) & 0xFF,
+            rejected_mti & 0xFF,
+        ))
+        frame = CanFrame.make_addressed_message(
+            mti=MTI_OPTIONAL_INTERACTION_REJECTED,
+            source_alias=self.alias,
+            dest_alias=dest_alias,
+            payload=payload,
+        )
+        await self.transport.send_frame(frame)
+
+    async def _process_node_message(self, frame: CanFrame):
+        """Handle Verify Node ID (0x0490 / 0x0488) and unknown addressed MTI rejection (0x0068)."""
+        if not self.alias_manager.is_permitted or not frame.is_openlcb_message:
+            return
+
+        mti = frame.mti
+        if mti == MTI_VERIFY_NODE_ID_GLOBAL:
+            if not frame.data or frame.data == self.node_id.to_bytes():
+                await self._send_verified_node_id()
+        elif frame.is_addressed and frame.destination_alias == self.alias:
+            if mti == MTI_VERIFY_NODE_ID_ADDRESSED:
+                payload = frame.destination_payload
+                if not payload or payload == self.node_id.to_bytes():
+                    await self._send_verified_node_id()
+            elif mti not in _KNOWN_ADDRESSED_MTIS:
+                await self._send_oir(frame.source_alias, mti)
 
     # --- Incoming Frame Dispatcher ---
 
@@ -191,6 +324,7 @@ class Node:
         await self.event_manager.process_frame(frame)
         await self.datagram_manager.process_frame(frame)
         await self.snip_service.process_frame(frame)
+        await self._process_node_message(frame)
 
     def _dispatch_frame(self, frame: CanFrame):
         """
@@ -208,24 +342,34 @@ class Node:
                     asyncio.create_task(self.alias_manager.process_frame(frame))
             return
 
+        if not self.alias_manager.is_permitted:
+            return
+
         if frame.is_datagram:
             if frame.destination_alias == alias:
                 asyncio.create_task(self.datagram_manager.process_frame(frame))
             return
 
         if frame.is_openlcb_message:
+            mti = frame.mti
             if frame.is_addressed:
                 if frame.destination_alias != alias:
                     return
-                mti = frame.mti
                 if mti == 0x0A28 or mti == 0x0A48:
                     asyncio.create_task(self.datagram_manager.process_frame(frame))
                 elif mti == 0x0828 or mti == 0x0DE8:
                     asyncio.create_task(self.snip_service.process_frame(frame))
+                elif mti == 0x0968:
+                    if self.event_manager.has_interest(frame):
+                        asyncio.create_task(self.event_manager.process_frame(frame))
+                elif mti == MTI_VERIFY_NODE_ID_ADDRESSED or mti not in _KNOWN_ADDRESSED_MTIS:
+                    asyncio.create_task(self._process_node_message(frame))
+            else:
+                if mti == MTI_VERIFY_NODE_ID_GLOBAL:
+                    if not frame.data or frame.data == self.node_id.to_bytes():
+                        asyncio.create_task(self._process_node_message(frame))
                 elif self.event_manager.has_interest(frame):
                     asyncio.create_task(self.event_manager.process_frame(frame))
-            elif self.event_manager.has_interest(frame):
-                asyncio.create_task(self.event_manager.process_frame(frame))
 
     # --- Lifecycle ---
 

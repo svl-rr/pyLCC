@@ -35,6 +35,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - `LoopbackTransport` & `LoopbackBus`: Fast in-memory bus for offline automated testing.
   - `GridConnectTcpClient`: Asynchronous TCP client for WiFi/Ethernet connections to JMRI or LCC Hubs.
   - `GridConnectTcpServer`: Standalone TCP hub for multi-client connections.
+  - `GridConnectSerialTransport`: USB CDC / UART serial transport supporting MicroPython (`machine.UART`) and desktop Python (`pyserial`).
 - [x] **Node ID & PRNG (`pylcc.node_id`, `pylcc.alias`)**
   - 48-bit `NodeID` model with 12-bit CID chunking (`chunk_7` through `chunk_4`).
   - Heidi G. Kuehn (1961) 48-bit Linear Congruential PRNG specified in OpenLCB **TN-9.7.2.1**.
@@ -75,8 +76,9 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - Exports null-terminated UTF-8 byte stream required by JMRI.
 - [x] **Core Node Abstraction & Layout Component Stubs (`pylcc.node`, `pylcc.components`)**
   - Unified `Node` class orchestrating `Transport`, `AliasManager`, `EventManager`, `DatagramManager`, `SnipService`, and `MemoryConfigurationService`.
+  - Message Network Discovery & Error Handling (NMRA S-9.7.3): responds to `Verify Node ID` Global (`0x0490`) & Addressed (`0x0488`) with `Verified Node ID` (`0x0170`), and emits `Optional Interaction Rejected` (`0x0068`) for unsupported addressed MTIs.
   - Single-task sequential frame dispatch loop cutting MicroPython Task heap allocations by 75%.
-  - Automatic CDI XML generation from attached components if no custom CDI document is provided.
+  - Live CDI-to-Component Binding: auto-generates CDI schema, applies persisted flash EventIDs/settings on startup, and live-rebinds component EventIDs & SNIP user name on Space `0xFD` writes without rebooting.
   - Lifecycle management: alias allocation, Initialization Complete (`0x0100`) broadcast, and AMR release on shutdown.
   - Clean reference component stubs with callback hooks for custom hardware drivers:
     - `Turnout`: Consumes Close/Throw events, produces Is Closed/Is Thrown feedback, `on_change` hook.
@@ -104,7 +106,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Step-by-step JMRI integration guide (`docs/jmri_integration.md`) covering discovery, CDI configuration via DecoderPro, turnout/sensor tables, and wireless gateway connection.
   - MIT License (`LICENSE`).
 - [x] **Validation & Tooling**
-  - 87 automated unit tests (100% passing).
+  - 95 automated unit tests (100% passing).
   - Comprehensive runnable examples (`mock_lcc_hub`, `gridconnect_tcp_monitor`, `virtual_turnout_node`, `jmri_interactive_node`, `micropython_wifi_node`, `wifi_can_bridge`).
 - [x] **Optimizations & MicroPython Tuning (Performance & Memory)**
   - [x] **Zero-Allocation Event Filtering (`pylcc/events.py`)**: Fast 8-byte dict lookups (`_consumers_by_bytes` / `_producers_by_bytes`) and synchronous `has_interest()` filtering without instantiating `EventID` objects.
