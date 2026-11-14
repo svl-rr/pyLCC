@@ -10,8 +10,21 @@ except ImportError:
     import uasyncio as asyncio
 
 import struct
+try:
+    from micropython import const
+except ImportError:
+    def const(x):
+        return x
+
 from ..can import CanFrame
 from ..transport.base import BaseTransport
+
+if hasattr(asyncio, "sleep_ms"):
+    _sleep_1ms = lambda: asyncio.sleep_ms(1)
+    _sleep_5ms = lambda: asyncio.sleep_ms(5)
+else:
+    _sleep_1ms = lambda: asyncio.sleep(0.001)
+    _sleep_5ms = lambda: asyncio.sleep(0.005)
 
 # Attempt MicroPython machine imports
 try:
@@ -22,51 +35,51 @@ except (ImportError, AttributeError):
 
 
 # --- MCP2517FD / MCP2518FD SPI Instructions ---
-INSTRUCTION_RESET = 0x00
-INSTRUCTION_WRITE = 0x02
-INSTRUCTION_READ  = 0x03
+INSTRUCTION_RESET = const(0x00)
+INSTRUCTION_WRITE = const(0x02)
+INSTRUCTION_READ  = const(0x03)
 
 # --- Register Addresses ---
-REG_CiCON      = 0x000  # CAN Control Register
-REG_CiNBTCFG   = 0x004  # Nominal Bit Time Configuration
-REG_CiDBTCFG   = 0x008  # Data Bit Time Configuration
-REG_CiTDC      = 0x00C  # Transmitter Delay Compensation
-REG_CiINT      = 0x01C  # Interrupt Flags
-REG_CiRXIF     = 0x020  # Receive Interrupt Status
-REG_CiTXIF     = 0x024  # Transmit Interrupt Status
-REG_CiTXREQ    = 0x02C  # Transmit Request
-REG_CiTREC     = 0x034  # Transmit/Receive Error Count
-REG_CiTEFCON   = 0x040  # Transmit Event FIFO Control
-REG_CiTXQCON   = 0x050  # Transmit Queue Control
-REG_CiTXQSTA   = 0x054  # Transmit Queue Status
-REG_CiTXQUA    = 0x058  # Transmit Queue User Address
+REG_CiCON      = const(0x000)  # CAN Control Register
+REG_CiNBTCFG   = const(0x004)  # Nominal Bit Time Configuration
+REG_CiDBTCFG   = const(0x008)  # Data Bit Time Configuration
+REG_CiTDC      = const(0x00C)  # Transmitter Delay Compensation
+REG_CiINT      = const(0x01C)  # Interrupt Flags
+REG_CiRXIF     = const(0x020)  # Receive Interrupt Status
+REG_CiTXIF     = const(0x024)  # Transmit Interrupt Status
+REG_CiTXREQ    = const(0x02C)  # Transmit Request
+REG_CiTREC     = const(0x034)  # Transmit/Receive Error Count
+REG_CiTEFCON   = const(0x040)  # Transmit Event FIFO Control
+REG_CiTXQCON   = const(0x050)  # Transmit Queue Control
+REG_CiTXQSTA   = const(0x054)  # Transmit Queue Status
+REG_CiTXQUA    = const(0x058)  # Transmit Queue User Address
 
 # FIFO 1 (Configured as RX FIFO)
-REG_CiFIFOCON1 = 0x05C  # FIFO 1 Control
-REG_CiFIFOSTA1 = 0x060  # FIFO 1 Status
-REG_CiFIFOUA1  = 0x064  # FIFO 1 User Address
+REG_CiFIFOCON1 = const(0x05C)  # FIFO 1 Control
+REG_CiFIFOSTA1 = const(0x060)  # FIFO 1 Status
+REG_CiFIFOUA1  = const(0x064)  # FIFO 1 User Address
 
 # Filter Registers (Filter 0)
-REG_CiFLTCON0  = 0x1D0  # Filter Control 0
-REG_CiFLTOBJ0  = 0x1F0  # Filter Object 0
-REG_CiMASK0    = 0x270  # Filter Mask 0
+REG_CiFLTCON0  = const(0x1D0)  # Filter Control 0
+REG_CiFLTOBJ0  = const(0x1F0)  # Filter Object 0
+REG_CiMASK0    = const(0x270)  # Filter Mask 0
 
 # Oscillator and I/O Control
-REG_OSC        = 0xE00  # Oscillator Control
-REG_IOCON      = 0xE04  # I/O Control
+REG_OSC        = const(0xE00)  # Oscillator Control
+REG_IOCON      = const(0xE04)  # I/O Control
 
 # Message RAM Start
-RAM_START_ADDR = 0x400
+RAM_START_ADDR = const(0x400)
 
 # Operation Modes (bits 30-28 of CiCON)
-MODE_NORMAL_CAN20 = 0x0  # Normal CAN 2.0 Mode (Classic CAN for OpenLCB)
-MODE_SLEEP        = 0x1
-MODE_INTERNAL_LOOPBACK = 0x2
-MODE_LISTEN_ONLY  = 0x3
-MODE_CONFIGURATION = 0x4
-MODE_EXTERNAL_LOOPBACK = 0x5
-MODE_CLASSIC_CAN  = 0x6
-MODE_RESTRICTED   = 0x7
+MODE_NORMAL_CAN20      = const(0x0)  # Normal CAN 2.0 Mode (Classic CAN for OpenLCB)
+MODE_SLEEP             = const(0x1)
+MODE_INTERNAL_LOOPBACK = const(0x2)
+MODE_LISTEN_ONLY       = const(0x3)
+MODE_CONFIGURATION     = const(0x4)
+MODE_EXTERNAL_LOOPBACK = const(0x5)
+MODE_CLASSIC_CAN       = const(0x6)
+MODE_RESTRICTED        = const(0x7)
 
 
 class Mcp2518fdTransport(BaseTransport):
@@ -102,6 +115,8 @@ class Mcp2518fdTransport(BaseTransport):
 
         self._rx_task = None
         self._is_connected = False
+        self._txqcon = 0
+        self._fifo1con = 0
 
     @property
     def is_connected(self) -> bool:
@@ -205,10 +220,7 @@ class Mcp2518fdTransport(BaseTransport):
         finally:
             self._deselect()
 
-        try:
-            await asyncio.sleep_ms(5)
-        except AttributeError:
-            await asyncio.sleep(0.005)
+        await _sleep_5ms()
 
         # 2. Configure Oscillator (divide by 1, disable PLL)
         self._write_reg32(REG_OSC, 0x00000000)
@@ -238,13 +250,13 @@ class Mcp2518fdTransport(BaseTransport):
 
         # 5. Configure Transmit Queue (TXQ)
         # FSIZE=7 (8 messages), PLSIZE=0 (8-byte payload), TXEN=1
-        txqcon = (0 << 29) | (7 << 24) | (1 << 7)  # PLSIZE=0, FSIZE=7, TXEN=1
-        self._write_reg32(REG_CiTXQCON, txqcon)
+        self._txqcon = (0 << 29) | (7 << 24) | (1 << 7)  # PLSIZE=0, FSIZE=7, TXEN=1
+        self._write_reg32(REG_CiTXQCON, self._txqcon)
 
         # 6. Configure Receive FIFO 1 (Deep 31-message hardware FIFO)
         # FSIZE=30 (31 messages), PLSIZE=0 (8-byte payload), TXEN=0 (RX mode), RXIE=1
-        fifo1con = (0 << 29) | (30 << 24) | (1 << 0)  # PLSIZE=0, FSIZE=30, RXIE=1
-        self._write_reg32(REG_CiFIFOCON1, fifo1con)
+        self._fifo1con = (0 << 29) | (30 << 24) | (1 << 0)  # PLSIZE=0, FSIZE=30, RXIE=1
+        self._write_reg32(REG_CiFIFOCON1, self._fifo1con)
 
         # 7. Configure Filter 0 to accept ALL 29-bit Extended frames into FIFO 1
         # CiFLTCON0: FLTEN=1, FBP=1 (point to FIFO 1)
@@ -270,16 +282,24 @@ class Mcp2518fdTransport(BaseTransport):
         """Poll FIFO 1 in background and dispatch incoming frames."""
         while self._is_connected and not self.is_closed:
             try:
-                # Check FIFO 1 status: bit 0 (RXIF) is set when FIFO is not empty
-                sta = self._read_reg32(REG_CiFIFOSTA1)
-                if sta & 0x01:  # Not empty!
+                if self._int is not None and hasattr(self._int, "value") and self._int.value() != 0:
+                    await _sleep_1ms()
+                    continue
+
+                # Drain up to 8 pending frames per tick without starving event loop
+                for _ in range(8):
+                    # Check FIFO 1 status: bit 0 (RXIF) is set when FIFO is not empty
+                    sta = self._read_reg32(REG_CiFIFOSTA1)
+                    if not (sta & 0x01):
+                        break
+
                     # Get user address for head of FIFO 1 in RAM
                     ua = self._read_reg32(REG_CiFIFOUA1)
                     # Read 16-byte message object: 4-byte ID + 4-byte flags + 8-byte data
                     raw_msg = self._read_bytes(RAM_START_ADDR + ua, 16)
 
-                    # Increment FIFO pointer (UINC = bit 8 of CiFIFOCON1)
-                    self._write_reg32(REG_CiFIFOCON1, self._read_reg32(REG_CiFIFOCON1) | (1 << 8))
+                    # Increment FIFO pointer using cached register config (UINC = bit 8)
+                    self._write_reg32(REG_CiFIFOCON1, self._fifo1con | (1 << 8))
 
                     # Unpack CAN message
                     frame = self._unpack_can_message(raw_msg)
@@ -288,10 +308,7 @@ class Mcp2518fdTransport(BaseTransport):
             except Exception:
                 pass
 
-            try:
-                await asyncio.sleep_ms(1)
-            except AttributeError:
-                await asyncio.sleep(0.001)
+            await _sleep_1ms()
 
     def _unpack_can_message(self, raw: bytes) -> CanFrame:
         """Unpack 16-byte MCP2518FD message object into pyLCC CanFrame."""
@@ -352,17 +369,12 @@ class Mcp2518fdTransport(BaseTransport):
                 # Write to RAM
                 self._write_bytes(RAM_START_ADDR + ua, msg_bytes)
 
-                # Increment TXQ pointer and request transmission (UINC=bit 8, TXREQ=bit 9)
-                txqcon = self._read_reg32(REG_CiTXQCON)
-                txqcon |= (1 << 8) | (1 << 9)
-                self._write_reg32(REG_CiTXQCON, txqcon)
+                # Increment TXQ pointer and request transmission using cached config (UINC=bit 8, TXREQ=bit 9)
+                self._write_reg32(REG_CiTXQCON, self._txqcon | (1 << 8) | (1 << 9))
                 return True
 
             if attempt < max_retries - 1:
-                try:
-                    await asyncio.sleep_ms(1)
-                except AttributeError:
-                    await asyncio.sleep(0.001)
+                await _sleep_1ms()
 
         return False
 

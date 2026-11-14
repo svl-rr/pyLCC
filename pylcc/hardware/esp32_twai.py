@@ -12,6 +12,11 @@ except ImportError:
 from ..can import CanFrame
 from ..transport.base import BaseTransport
 
+if hasattr(asyncio, "sleep_ms"):
+    _sleep_1ms = lambda: asyncio.sleep_ms(1)
+else:
+    _sleep_1ms = lambda: asyncio.sleep(0.001)
+
 # Attempt MicroPython machine imports
 try:
     from machine import Pin, TWAI
@@ -99,33 +104,25 @@ class Esp32TwaiTransport(BaseTransport):
 
     async def _rx_loop(self):
         """Asynchronous background worker polling TWAI FIFO and dispatching frames."""
-        # Yield time between polls when FIFO is empty
+        has_any = hasattr(self._twai, "any")
         while self._is_connected and not self.is_closed:
             try:
-                has_frame = False
-                if hasattr(self._twai, "any"):
-                    has_frame = bool(self._twai.any())
-                else:
-                    # In mock or custom builds without any()
-                    has_frame = True
-
-                if has_frame:
+                # Drain up to 8 pending frames per tick without starving event loop
+                for _ in range(8):
+                    if has_any and not self._twai.any():
+                        break
                     msg = self._twai.recv()
-                    if msg is not None:
-                        frame = self._convert_msg_to_frame(msg)
-                        if frame is not None:
-                            self._dispatch_frame(frame)
-                            # Do not sleep if frames are waiting in FIFO
-                            continue
+                    if msg is None:
+                        break
+                    frame = self._convert_msg_to_frame(msg)
+                    if frame is not None:
+                        self._dispatch_frame(frame)
             except Exception:
                 # Buffer empty or transient peripheral read condition
                 pass
 
             # Yield to other asyncio tasks
-            try:
-                await asyncio.sleep_ms(1)
-            except AttributeError:
-                await asyncio.sleep(0.001)
+            await _sleep_1ms()
 
     def _convert_msg_to_frame(self, msg) -> CanFrame:
         """
@@ -188,10 +185,7 @@ class Esp32TwaiTransport(BaseTransport):
             except (OSError, Exception):
                 # TX FIFO full; yield and retry
                 if attempt < max_attempts - 1:
-                    try:
-                        await asyncio.sleep_ms(1)
-                    except AttributeError:
-                        await asyncio.sleep(0.001)
+                    await _sleep_1ms()
 
         return False
 

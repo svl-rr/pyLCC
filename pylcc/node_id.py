@@ -9,25 +9,29 @@ class NodeID:
     Represents a unique 48-bit (6-byte) OpenLCB / LCC Node ID.
     Can be initialized from an integer, 6-byte bytes/bytearray, or hex-formatted string.
     """
-    __slots__ = ("_value",)
+    __slots__ = ("_value", "_bytes")
 
     def __init__(self, value):
         if isinstance(value, int):
             if not (0 <= value <= 0xFFFFFFFFFFFF):
                 raise ValueError(f"NodeID integer out of 48-bit range: 0x{value:X}")
             self._value = value
+            self._bytes = value.to_bytes(6, "big")
         elif isinstance(value, (bytes, bytearray)):
             if len(value) != 6:
                 raise ValueError(f"NodeID bytes must be exactly 6 bytes (got {len(value)})")
-            self._value = int.from_bytes(value, "big")
+            self._bytes = bytes(value)
+            self._value = int.from_bytes(self._bytes, "big")
         elif isinstance(value, str):
             # Supports '05.01.01.01.14.00' or '05:01:01:01:14:00' or '050101011400'
             clean = value.replace(".", "").replace(":", "").replace("-", "").strip()
             if len(clean) != 12:
                 raise ValueError(f"Invalid NodeID string format: {value!r}")
             self._value = int(clean, 16)
+            self._bytes = self._value.to_bytes(6, "big")
         elif isinstance(value, NodeID):
             self._value = value._value
+            self._bytes = value._bytes
         else:
             raise TypeError(f"Cannot create NodeID from type {type(value).__name__}")
 
@@ -37,7 +41,7 @@ class NodeID:
 
     def to_bytes(self) -> bytes:
         """Return Node ID as 6 big-endian bytes."""
-        return self._value.to_bytes(6, "big")
+        return self._bytes
 
     # 12-bit chunks for CAN Check ID (CID) frames
     @property

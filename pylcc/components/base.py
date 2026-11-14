@@ -8,6 +8,7 @@ from ..event_id import EventID
 
 class BaseComponent:
     """Base class for all layout components (Turnout, Sensor, Signal, Light, etc.)."""
+    __slots__ = ("name", "on_change", "node")
     def __init__(self, name: str = "", on_change=None):
         self.name = name
         self.on_change = on_change

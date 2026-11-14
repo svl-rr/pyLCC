@@ -3,6 +3,11 @@ GridConnect Protocol Serialization and Streaming Parser.
 Encodes and decodes standard CAN frames in GridConnect ASCII format (:X...N...;).
 """
 
+try:
+    import binascii
+except ImportError:
+    import ubinascii as binascii
+
 from .can import CanFrame
 
 
@@ -14,12 +19,12 @@ def encode_gridconnect(frame: CanFrame) -> str:
     frame_type = "X" if frame.is_extended else "S"
     id_format = f"{frame.can_id:08X}" if frame.is_extended else f"{frame.can_id:03X}"
     rtr_flag = "R" if frame.is_rtr else "N"
-    
+
     if frame.data:
-        data_hex = "".join(f"{b:02X}" for b in frame.data)
+        data_hex = binascii.hexlify(frame.data).decode("ascii").upper()
     else:
         data_hex = ""
-        
+
     return f":{frame_type}{id_format}{rtr_flag}{data_hex};"
 
 
@@ -70,15 +75,18 @@ def decode_gridconnect(text: str) -> CanFrame:
     if len(data_hex) % 2 != 0:
         raise ValueError(f"Odd number of hex nibbles in data: {data_hex!r}")
 
-    data_bytes = bytearray()
-    for i in range(0, len(data_hex), 2):
-        byte_val = int(data_hex[i:i + 2], 16)
-        data_bytes.append(byte_val)
+    if data_hex:
+        try:
+            data_bytes = binascii.unhexlify(data_hex)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid hex in data payload: {data_hex!r}") from e
+    else:
+        data_bytes = b""
 
     if len(data_bytes) > 8:
         raise ValueError(f"Data length exceeds 8 bytes: {len(data_bytes)} bytes in {text!r}")
 
-    return CanFrame(can_id=can_id, data=bytes(data_bytes), is_extended=is_extended, is_rtr=is_rtr)
+    return CanFrame(can_id=can_id, data=data_bytes, is_extended=is_extended, is_rtr=is_rtr)
 
 
 class GridConnectParser:
@@ -87,48 +95,65 @@ class GridConnectParser:
     Buffers incoming bytes or string chunks and yields parsed CanFrame instances.
     Resilient to whitespace, newlines, and frame boundary fragmentation.
     """
+    __slots__ = ("_buffer",)
+
     def __init__(self):
-        self._buffer = []
-        self._in_frame = False
+        self._buffer = bytearray()
 
     def feed(self, chunk) -> list:
         """
         Feed a chunk of bytes or string into the parser.
         Returns a list of parsed CanFrame objects.
         """
-        if isinstance(chunk, (bytes, bytearray)):
-            # Convert bytes to string (ASCII)
-            chunk = chunk.decode("latin1", errors="ignore")
+        if not chunk:
+            return []
+
+        if isinstance(chunk, str):
+            chunk = chunk.encode("latin1")
+
+        buf = self._buffer
+        buf.extend(chunk)
 
         frames = []
-        for char in chunk:
-            if char == ":":
-                # Start of a new frame. If already buffering, drop previous incomplete frame.
-                self._buffer = [":"]
-                self._in_frame = True
-            elif char == ";":
-                if self._in_frame:
-                    self._buffer.append(";")
-                    frame_str = "".join(self._buffer)
-                    self._buffer = []
-                    self._in_frame = False
-                    try:
-                        frames.append(decode_gridconnect(frame_str))
-                    except ValueError:
-                        # Drop corrupt frame silently or log
-                        pass
-            elif self._in_frame:
-                # Discard whitespace inside or outside frame
-                if not char.isspace():
-                    self._buffer.append(char)
-                    # Safety check: prevent runaway buffers
-                    if len(self._buffer) > 40:
-                        self._buffer = []
-                        self._in_frame = False
+        while buf:
+            start = buf.find(b":")
+            if start == -1:
+                buf.clear()
+                break
+            if start > 0:
+                del buf[:start]
+
+            end = buf.find(b";", 1)
+            if end == -1:
+                # If a newer ':' exists in the partial buffer, drop the earlier incomplete one
+                last_colon = buf.rfind(b":")
+                if last_colon > 0:
+                    del buf[:last_colon]
+                # Safety check: prevent runaway buffers
+                if len(buf) > 40:
+                    buf.clear()
+                break
+
+            # Handle nested/restarted ':' before the terminating ';'
+            last_colon = buf.rfind(b":", 0, end)
+            if last_colon > 0:
+                del buf[:last_colon]
+                end -= last_colon
+
+            raw_frame = buf[:end + 1].decode("latin1")
+            del buf[:end + 1]
+
+            if " " in raw_frame or "\t" in raw_frame or "\r" in raw_frame or "\n" in raw_frame:
+                raw_frame = "".join(c for c in raw_frame if not c.isspace())
+
+            try:
+                frames.append(decode_gridconnect(raw_frame))
+            except ValueError:
+                # Drop corrupt frame silently
+                pass
 
         return frames
 
     def reset(self):
         """Reset internal buffer state."""
-        self._buffer = []
-        self._in_frame = False
+        self._buffer.clear()

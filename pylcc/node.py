@@ -184,8 +184,39 @@ class Node:
         await self.snip_service.process_frame(frame)
 
     def _dispatch_frame(self, frame: CanFrame):
-        """Transport listener callback creating a single lightweight task per frame."""
-        asyncio.create_task(self._handle_incoming_frame(frame))
+        """
+        Synchronous fast-path frame filter and router.
+        Drops irrelevant bus traffic before allocating an asyncio task.
+        """
+        alias = self.alias
+        if frame.source_alias == alias and alias != 0:
+            asyncio.create_task(self.alias_manager.process_frame(frame))
+            return
+
+        if frame.is_can_control:
+            if frame.is_ame and self.alias_manager.is_permitted:
+                if not frame.data or frame.data == self.node_id.to_bytes():
+                    asyncio.create_task(self.alias_manager.process_frame(frame))
+            return
+
+        if frame.is_datagram:
+            if frame.destination_alias == alias:
+                asyncio.create_task(self.datagram_manager.process_frame(frame))
+            return
+
+        if frame.is_openlcb_message:
+            if frame.is_addressed:
+                if frame.destination_alias != alias:
+                    return
+                mti = frame.mti
+                if mti == 0x0A28 or mti == 0x0A48:
+                    asyncio.create_task(self.datagram_manager.process_frame(frame))
+                elif mti == 0x0828 or mti == 0x0DE8:
+                    asyncio.create_task(self.snip_service.process_frame(frame))
+                elif self.event_manager.has_interest(frame):
+                    asyncio.create_task(self.event_manager.process_frame(frame))
+            elif self.event_manager.has_interest(frame):
+                asyncio.create_task(self.event_manager.process_frame(frame))
 
     # --- Lifecycle ---
 

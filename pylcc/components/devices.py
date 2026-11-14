@@ -17,6 +17,7 @@ class Turnout(BaseComponent):
     Consumes Close and Throw command events.
     Optionally produces Is Closed and Is Thrown feedback events.
     """
+    __slots__ = ("close_event", "throw_event", "is_closed_event", "is_thrown_event", "state")
     STATE_CLOSED = "CLOSED"
     STATE_THROWN = "THROWN"
     STATE_UNKNOWN = "UNKNOWN"
@@ -132,6 +133,7 @@ class Sensor(BaseComponent):
     OpenLCB Sensor / Block Occupancy Detector / Push Button.
     Produces Active (Occupied / Pressed) and Inactive (Cleared / Released) events.
     """
+    __slots__ = ("active_event", "inactive_event", "state")
     STATE_INACTIVE = "INACTIVE"
     STATE_ACTIVE = "ACTIVE"
 
@@ -212,6 +214,7 @@ class Signal(BaseComponent):
     OpenLCB Signal / Signal Mast.
     Consumes aspect events (e.g. STOP, APPROACH, CLEAR, RESTRICTING) and updates state.
     """
+    __slots__ = ("aspect_events", "current_aspect")
     def __init__(
         self,
         name: str = "",
@@ -274,6 +277,7 @@ class Output(BaseComponent):
     OpenLCB Discrete Output / Light / Uncoupler / Relay.
     Consumes On and Off events.
     """
+    __slots__ = ("on_event", "off_event", "state")
     STATE_OFF = "OFF"
     STATE_ON = "ON"
 

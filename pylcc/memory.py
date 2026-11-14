@@ -10,6 +10,12 @@ except ImportError:
     import uasyncio as asyncio
 
 import struct
+try:
+    from micropython import const
+except ImportError:
+    def const(x):
+        return x
+
 from .can import CanFrame
 from .node_id import NodeID
 from .event_id import EventID
@@ -17,46 +23,48 @@ from .datagram import Datagram, DatagramManager
 
 
 # Datagram Protocol Identifier for Memory Configuration
-DATAGRAM_PROTOCOL_MEMORY_CONFIG = 0x20
+DATAGRAM_PROTOCOL_MEMORY_CONFIG = const(0x20)
 
 # Standard OpenLCB Memory Space Identifiers
-SPACE_CDI         = 0xFF  # Configuration Description Information (XML, Read-Only)
-SPACE_ALL_MEMORY  = 0xFE  # All Memory Space
-SPACE_CONFIG      = 0xFD  # Non-volatile Configuration Memory (Read/Write)
-SPACE_ACDI_MFG    = 0xFC  # ACDI Manufacturer Information (Read-Only)
-SPACE_ACDI_USER   = 0xFB  # ACDI User Information (Read/Write)
+SPACE_CDI         = const(0xFF)  # Configuration Description Information (XML, Read-Only)
+SPACE_ALL_MEMORY  = const(0xFE)  # All Memory Space
+SPACE_CONFIG      = const(0xFD)  # Non-volatile Configuration Memory (Read/Write)
+SPACE_ACDI_MFG    = const(0xFC)  # ACDI Manufacturer Information (Read-Only)
+SPACE_ACDI_USER   = const(0xFB)  # ACDI User Information (Read/Write)
 
 # Memory Configuration Command Opcodes (Byte 1)
-CMD_WRITE_GENERIC = 0x00  # Write with space byte
-CMD_WRITE_CDI     = 0x01  # Write to Space 0xFF (CDI)
-CMD_WRITE_ALL_MEM = 0x02  # Write to Space 0xFE
-CMD_WRITE_CONFIG  = 0x03  # Write to Space 0xFD (Config Memory)
+CMD_WRITE_GENERIC = const(0x00)  # Write with space byte
+CMD_WRITE_CDI     = const(0x01)  # Write to Space 0xFF (CDI)
+CMD_WRITE_ALL_MEM = const(0x02)  # Write to Space 0xFE
+CMD_WRITE_CONFIG  = const(0x03)  # Write to Space 0xFD (Config Memory)
 
-CMD_WRITE_REPLY_GENERIC = 0x10  # Write Reply with space byte
-CMD_WRITE_REPLY_CONFIG  = 0x13  # Write Reply for Space 0xFD
-CMD_WRITE_REPLY_FAILURE = 0x18  # Write Failure Reply
+CMD_WRITE_REPLY_GENERIC = const(0x10)  # Write Reply with space byte
+CMD_WRITE_REPLY_CONFIG  = const(0x13)  # Write Reply for Space 0xFD
+CMD_WRITE_REPLY_FAILURE = const(0x18)  # Write Failure Reply
 
-CMD_READ_GENERIC  = 0x40  # Read with space byte
-CMD_READ_CDI      = 0x41  # Read from Space 0xFF (CDI)
-CMD_READ_ALL_MEM  = 0x42  # Read from Space 0xFE
-CMD_READ_CONFIG   = 0x43  # Read from Space 0xFD (Config Memory)
+CMD_READ_GENERIC  = const(0x40)  # Read with space byte
+CMD_READ_CDI      = const(0x41)  # Read from Space 0xFF (CDI)
+CMD_READ_ALL_MEM  = const(0x42)  # Read from Space 0xFE
+CMD_READ_CONFIG   = const(0x43)  # Read from Space 0xFD (Config Memory)
 
-CMD_READ_REPLY_GENERIC = 0x50  # Read Reply with space byte
-CMD_READ_REPLY_CDI     = 0x51  # Read Reply for Space 0xFF (CDI)
-CMD_READ_REPLY_ALL_MEM = 0x52  # Read Reply for Space 0xFE
-CMD_READ_REPLY_CONFIG  = 0x53  # Read Reply for Space 0xFD
+CMD_READ_REPLY_GENERIC = const(0x50)  # Read Reply with space byte
+CMD_READ_REPLY_CDI     = const(0x51)  # Read Reply for Space 0xFF (CDI)
+CMD_READ_REPLY_ALL_MEM = const(0x52)  # Read Reply for Space 0xFE
+CMD_READ_REPLY_CONFIG  = const(0x53)  # Read Reply for Space 0xFD
 
-CMD_READ_REPLY_FAILURE = 0x58  # Read Failure Reply
+CMD_READ_REPLY_FAILURE = const(0x58)  # Read Failure Reply
 
-CMD_GET_CONFIG_OPTIONS = 0x80  # Get Configuration Options Request
-CMD_CONFIG_OPTIONS_REPLY = 0x82  # Configuration Options Reply
-CMD_GET_SPACE_INFO     = 0x84  # Get Space Info Request
-CMD_SPACE_INFO_REPLY   = 0x86  # Space Info Reply
-CMD_RESTART            = 0xA8  # Reboot / Restart Node
+CMD_GET_CONFIG_OPTIONS   = const(0x80)  # Get Configuration Options Request
+CMD_CONFIG_OPTIONS_REPLY = const(0x82)  # Configuration Options Reply
+CMD_GET_SPACE_INFO       = const(0x84)  # Get Space Info Request
+CMD_SPACE_INFO_REPLY     = const(0x86)  # Space Info Reply
+CMD_RESTART              = const(0xA8)  # Reboot / Restart Node
 
 
 class MemorySpace:
     """Base class for an addressable memory space on an OpenLCB node."""
+    __slots__ = ("space_id", "read_only")
+
     def __init__(self, space_id: int, read_only: bool = False):
         self.space_id = space_id
         self.read_only = read_only
@@ -75,21 +83,26 @@ class MemorySpace:
 
 class BytesMemorySpace(MemorySpace):
     """Memory space backed by in-memory bytes or bytearray (e.g. CDI XML or static tables)."""
+    __slots__ = ("_data",)
+
     def __init__(self, space_id: int, data: bytes = b"", read_only: bool = True):
         super().__init__(space_id, read_only=read_only)
-        self._data = bytearray(data)
+        self._data = data if (read_only and isinstance(data, bytes)) else bytearray(data)
 
     def set_data(self, data: bytes):
-        self._data = bytearray(data)
+        self._data = data if (self.read_only and isinstance(data, bytes)) else bytearray(data)
 
     def read(self, address: int, count: int) -> bytes:
         if address >= len(self._data):
             return b"\x00"  # End of data / null-terminator
-        return bytes(self._data[address:address + count])
+        chunk = self._data[address:address + count]
+        return chunk if isinstance(chunk, bytes) else bytes(chunk)
 
     def write(self, address: int, data: bytes) -> bool:
         if self.read_only:
             return False
+        if isinstance(self._data, bytes):
+            self._data = bytearray(self._data)
         # Expand buffer if needed
         required_len = address + len(data)
         if required_len > len(self._data):
@@ -106,6 +119,7 @@ class ConfigMemorySpace(MemorySpace):
     Persistent Configuration Memory (Space 0xFD).
     Maintains user settings and event IDs, with optional persistence callback or file storage.
     """
+    __slots__ = ("size", "on_write", "filename", "_data")
     def __init__(self, size: int = 512, on_write=None, filename: str = None, default_data: bytes = None):
         super().__init__(SPACE_CONFIG, read_only=False)
         self.size = size
@@ -228,6 +242,7 @@ class MemoryConfigurationService:
     Handles OpenLCB Memory Configuration Datagrams (Protocol 0x20).
     Routes reads and writes to registered MemorySpaces and replies via datagrams.
     """
+    __slots__ = ("node_id", "alias_manager", "datagram_manager", "_spaces", "_on_restart_callback")
     def __init__(self, node_id, alias_manager, datagram_manager: DatagramManager):
         self.node_id = NodeID(node_id)
         self.alias_manager = alias_manager

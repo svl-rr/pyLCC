@@ -19,6 +19,18 @@ class LCCBridge:
     Transparently forwards frames between a physical CAN transport and a GridConnect TCP transport.
     Maintains packet statistics and error counters.
     """
+    __slots__ = (
+        "can_transport",
+        "tcp_transport",
+        "verbose",
+        "can_to_tcp_count",
+        "tcp_to_can_count",
+        "can_tx_errors",
+        "tcp_tx_errors",
+        "_running",
+        "_can_listener",
+        "_tcp_listener",
+    )
     def __init__(
         self,
         can_transport: BaseTransport,

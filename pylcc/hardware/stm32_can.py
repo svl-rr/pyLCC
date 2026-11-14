@@ -12,6 +12,11 @@ except ImportError:
 from ..can import CanFrame
 from ..transport.base import BaseTransport
 
+if hasattr(asyncio, "sleep_ms"):
+    _sleep_1ms = lambda: asyncio.sleep_ms(1)
+else:
+    _sleep_1ms = lambda: asyncio.sleep(0.001)
+
 # Attempt MicroPython pyb import
 try:
     import pyb
@@ -76,29 +81,24 @@ class Stm32CanTransport(BaseTransport):
 
     async def _rx_loop(self):
         """Poll STM32 CAN receive FIFO 0 and dispatch incoming frames."""
+        has_any = hasattr(self._can, "any")
         while self._is_connected and not self.is_closed:
             try:
-                # Check if frames are available in FIFO 0
-                has_frames = False
-                if hasattr(self._can, "any"):
-                    has_frames = bool(self._can.any(0))
-                else:
-                    has_frames = True
-
-                if has_frames:
+                # Drain up to 8 pending frames per tick without starving event loop
+                for _ in range(8):
+                    if has_any and not self._can.any(0):
+                        break
                     # pyb.CAN.recv(fifo) -> (id, is_extended, is_rtr, fmi, data)
                     msg = self._can.recv(0, timeout=0)
-                    if msg is not None:
-                        frame = self._convert_msg_to_frame(msg)
-                        if frame is not None:
-                            self._dispatch_frame(frame)
+                    if msg is None:
+                        break
+                    frame = self._convert_msg_to_frame(msg)
+                    if frame is not None:
+                        self._dispatch_frame(frame)
             except Exception:
                 pass
 
-            try:
-                await asyncio.sleep_ms(1)
-            except AttributeError:
-                await asyncio.sleep(0.001)
+            await _sleep_1ms()
 
     def _convert_msg_to_frame(self, msg) -> CanFrame:
         """
@@ -151,10 +151,7 @@ class Stm32CanTransport(BaseTransport):
                     return True
             except Exception:
                 if attempt < max_attempts - 1:
-                    try:
-                        await asyncio.sleep_ms(1)
-                    except AttributeError:
-                        await asyncio.sleep(0.001)
+                    await _sleep_1ms()
 
         return False
 

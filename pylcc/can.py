@@ -3,29 +3,35 @@ OpenLCB CAN Frame Representation and Bit Field Definitions.
 Compliant with NMRA Standard S-9.7.2.1 (CAN Frame Transfer).
 """
 
+try:
+    from micropython import const
+except ImportError:
+    def const(x):
+        return x
+
 # Mask constants for 29-bit CAN identifiers
-CAN_ID_MASK = 0x1FFFFFFF
-OPENLCB_CAN_FRAME_FLAG = 0x10000000  # Bit 28: Reserved (must be 1 for OpenLCB)
-FRAME_TYPE_MASK        = 0x08000000  # Bit 27: 0 = CAN control frame, 1 = OpenLCB message
-VARIABLE_FIELD_MASK    = 0x07FFF000  # Bits 26-12: 15-bit variable field / MTI
-VARIABLE_FIELD_SHIFT   = 12
-SOURCE_ALIAS_MASK      = 0x00000FFF  # Bits 11-0: 12-bit source alias
+CAN_ID_MASK            = const(0x1FFFFFFF)
+OPENLCB_CAN_FRAME_FLAG = const(0x10000000)  # Bit 28: Reserved (must be 1 for OpenLCB)
+FRAME_TYPE_MASK        = const(0x08000000)  # Bit 27: 0 = CAN control frame, 1 = OpenLCB message
+VARIABLE_FIELD_MASK    = const(0x07FFF000)  # Bits 26-12: 15-bit variable field / MTI
+VARIABLE_FIELD_SHIFT   = const(12)
+SOURCE_ALIAS_MASK      = const(0x00000FFF)  # Bits 11-0: 12-bit source alias
 
 # CAN Control Frame variable field values (Bits 26-12)
-CONTROL_CID7_PREFIX = 0x7000  # CID Sequence 7 (Node ID bits 47-36)
-CONTROL_CID6_PREFIX = 0x6000  # CID Sequence 6 (Node ID bits 35-24)
-CONTROL_CID5_PREFIX = 0x5000  # CID Sequence 5 (Node ID bits 23-12)
-CONTROL_CID4_PREFIX = 0x4000  # CID Sequence 4 (Node ID bits 11-0)
-CONTROL_RID         = 0x0700  # Reserve ID
-CONTROL_AMD         = 0x0701  # Alias Map Definition
-CONTROL_AME         = 0x0702  # Alias Mapping Enquiry
-CONTROL_AMR         = 0x0703  # Alias Map Reset
+CONTROL_CID7_PREFIX = const(0x7000)  # CID Sequence 7 (Node ID bits 47-36)
+CONTROL_CID6_PREFIX = const(0x6000)  # CID Sequence 6 (Node ID bits 35-24)
+CONTROL_CID5_PREFIX = const(0x5000)  # CID Sequence 5 (Node ID bits 23-12)
+CONTROL_CID4_PREFIX = const(0x4000)  # CID Sequence 4 (Node ID bits 11-0)
+CONTROL_RID         = const(0x0700)  # Reserve ID
+CONTROL_AMD         = const(0x0701)  # Alias Map Definition
+CONTROL_AME         = const(0x0702)  # Alias Mapping Enquiry
+CONTROL_AMR         = const(0x0703)  # Alias Map Reset
 
 # Datagram CAN Frame Format Types (Bits 28-24 when bits 28-27 are 11)
-FRAME_FORMAT_DATAGRAM_ONLY   = 0x1A000000  # Format 2: Single-frame datagram
-FRAME_FORMAT_DATAGRAM_FIRST  = 0x1B000000  # Format 3: First frame of multi-frame datagram
-FRAME_FORMAT_DATAGRAM_MIDDLE = 0x1C000000  # Format 4: Middle frame of multi-frame datagram
-FRAME_FORMAT_DATAGRAM_FINAL  = 0x1D000000  # Format 5: Final frame of multi-frame datagram
+FRAME_FORMAT_DATAGRAM_ONLY   = const(0x1A000000)  # Format 2: Single-frame datagram
+FRAME_FORMAT_DATAGRAM_FIRST  = const(0x1B000000)  # Format 3: First frame of multi-frame datagram
+FRAME_FORMAT_DATAGRAM_MIDDLE = const(0x1C000000)  # Format 4: Middle frame of multi-frame datagram
+FRAME_FORMAT_DATAGRAM_FINAL  = const(0x1D000000)  # Format 5: Final frame of multi-frame datagram
 
 
 class CanFrame:
@@ -175,7 +181,7 @@ class CanFrame:
         if self.is_datagram:
             return (self.can_id >> VARIABLE_FIELD_SHIFT) & SOURCE_ALIAS_MASK
         if self.is_addressed and len(self.data) >= 2:
-            return int.from_bytes(self.data[:2], "big") & SOURCE_ALIAS_MASK
+            return ((self.data[0] << 8) | self.data[1]) & SOURCE_ALIAS_MASK
         return None
 
     @property
@@ -273,7 +279,8 @@ class CanFrame:
             | ((mti_addressed & 0x0FFF) << VARIABLE_FIELD_SHIFT)
             | (source_alias & SOURCE_ALIAS_MASK)
         )
-        data = (dest_alias & SOURCE_ALIAS_MASK).to_bytes(2, "big") + payload
+        alias_masked = dest_alias & SOURCE_ALIAS_MASK
+        data = bytes(((alias_masked >> 8) & 0x0F, alias_masked & 0xFF)) + payload
         return cls(can_id, data)
 
     # --- Constructors for Datagram Frames ---

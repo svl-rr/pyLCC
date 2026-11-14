@@ -24,6 +24,7 @@ class AliasPrng:
     specified in OpenLCB TN-9.7.2.1 for non-colliding alias generation.
     x_{i+1} = (513 * x_i + 0x1B0CA37A4BA9) mod 2^48
     """
+    __slots__ = ("_state",)
     MULTIPLIER = 513
     ADDEND = 0x1B0CA37A4BA9
     MASK_48 = 0xFFFFFFFFFFFF
@@ -62,6 +63,16 @@ class AliasManager:
     Inhibited -> Checking (CID 7..4 + 100ms timer) -> Permitted (RID + AMD).
     Defends alias against collisions and responds to Alias Mapping Enquiries (AME).
     """
+    __slots__ = (
+        "node_id",
+        "transport",
+        "prng",
+        "alias",
+        "state",
+        "_collision_event",
+        "_check_timer_task",
+        "_on_permitted_callbacks",
+    )
     def __init__(self, node_id, transport):
         self.node_id = NodeID(node_id)
         self.transport = transport

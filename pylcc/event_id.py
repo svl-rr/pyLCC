@@ -12,7 +12,7 @@ class EventID:
     Used for Producer/Consumer events: sensors, turnouts, block occupancy, signals, etc.
     Typically structured as a 48-bit Node ID followed by a 16-bit event counter.
     """
-    __slots__ = ("_value",)
+    __slots__ = ("_value", "_bytes")
 
     def __init__(self, value, index: int = None):
         if index is not None:
@@ -21,22 +21,27 @@ class EventID:
             if not (0 <= index <= 0xFFFF):
                 raise ValueError(f"Event index must be a 16-bit unsigned integer (got {index})")
             self._value = (base_node.value << 16) | index
+            self._bytes = self._value.to_bytes(8, "big")
         elif isinstance(value, int):
             if not (0 <= value <= 0xFFFFFFFFFFFFFFFF):
                 raise ValueError(f"EventID integer out of 64-bit range: 0x{value:X}")
             self._value = value
+            self._bytes = value.to_bytes(8, "big")
         elif isinstance(value, (bytes, bytearray)):
             if len(value) != 8:
                 raise ValueError(f"EventID bytes must be exactly 8 bytes (got {len(value)})")
-            self._value = int.from_bytes(value, "big")
+            self._bytes = bytes(value)
+            self._value = int.from_bytes(self._bytes, "big")
         elif isinstance(value, str):
             # Supports '05.01.01.01.14.00.00.01' or '05:01:01:01:14:00:00:01' or hex string
             clean = value.replace(".", "").replace(":", "").replace("-", "").strip()
             if len(clean) != 16:
                 raise ValueError(f"Invalid EventID string format: {value!r}")
             self._value = int(clean, 16)
+            self._bytes = self._value.to_bytes(8, "big")
         elif isinstance(value, EventID):
             self._value = value._value
+            self._bytes = value._bytes
         else:
             raise TypeError(f"Cannot create EventID from type {type(value).__name__}")
 
@@ -49,7 +54,7 @@ class EventID:
 
     def to_bytes(self) -> bytes:
         """Return Event ID as 8 big-endian bytes."""
-        return self._value.to_bytes(8, "big")
+        return self._bytes
 
     @property
     def node_id(self) -> NodeID:

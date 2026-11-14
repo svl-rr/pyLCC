@@ -8,37 +8,51 @@ try:
 except ImportError:
     import uasyncio as asyncio
 
+try:
+    from micropython import const
+except ImportError:
+    def const(x):
+        return x
+
 from .can import CanFrame
 from .node_id import NodeID
 
 
 # Protocol Support Inquiry / Reply MTIs (PIP)
-MTI_PROTOCOL_SUPPORT_INQUIRY = 0x0828
-MTI_PROTOCOL_SUPPORT_REPLY   = 0x0668
+MTI_PROTOCOL_SUPPORT_INQUIRY = const(0x0828)
+MTI_PROTOCOL_SUPPORT_REPLY   = const(0x0668)
 
 # Simple Node Information Protocol MTIs (SNIP)
-MTI_SIMPLE_NODE_IDENT_INFO_REQUEST = 0x0DE8
-MTI_SIMPLE_NODE_IDENT_INFO_REPLY   = 0x0A08
+MTI_SIMPLE_NODE_IDENT_INFO_REQUEST = const(0x0DE8)
+MTI_SIMPLE_NODE_IDENT_INFO_REPLY   = const(0x0A08)
 
 # Standard Protocol Identification Flags (PIP 24-bit mask)
-PIP_SIMPLE_NODE         = 0x800000  # Simple Node Protocol
-PIP_DATAGRAM            = 0x400000  # Datagram Protocol
-PIP_STREAM              = 0x200000  # Stream Protocol
-PIP_MEMORY_CONFIG       = 0x100000  # Memory Configuration Protocol
-PIP_RESERVATION         = 0x080000  # Reservation Protocol
-PIP_EVENT_EXCHANGE      = 0x040000  # Event Exchange Protocol
-PIP_IDENT_PROTOCOL      = 0x020000  # Identification Protocol
-PIP_TEACH_LEARN         = 0x010000  # Teaching/Learning Protocol
-PIP_REMOTE_BUTTON       = 0x008000  # Remote Button Protocol
-PIP_ACDI                = 0x004000  # Abbreviated CDI
-PIP_DISPLAY             = 0x002000  # Display Protocol
-PIP_SNIP                = 0x001000  # Simple Node Information Protocol
-PIP_CDI                 = 0x000800  # Configuration Description Information
-PIP_TRACTION_CONTROL    = 0x000400  # Train Control Protocol
+PIP_SIMPLE_NODE      = const(0x800000)  # Simple Node Protocol
+PIP_DATAGRAM         = const(0x400000)  # Datagram Protocol
+PIP_STREAM           = const(0x200000)  # Stream Protocol
+PIP_MEMORY_CONFIG    = const(0x100000)  # Memory Configuration Protocol
+PIP_RESERVATION      = const(0x080000)  # Reservation Protocol
+PIP_EVENT_EXCHANGE   = const(0x040000)  # Event Exchange Protocol
+PIP_IDENT_PROTOCOL   = const(0x020000)  # Identification Protocol
+PIP_TEACH_LEARN      = const(0x010000)  # Teaching/Learning Protocol
+PIP_REMOTE_BUTTON    = const(0x008000)  # Remote Button Protocol
+PIP_ACDI             = const(0x004000)  # Abbreviated CDI
+PIP_DISPLAY          = const(0x002000)  # Display Protocol
+PIP_SNIP             = const(0x001000)  # Simple Node Information Protocol
+PIP_CDI              = const(0x000800)  # Configuration Description Information
+PIP_TRACTION_CONTROL = const(0x000400)  # Train Control Protocol
 
 
 class SnipData:
     """Holds the human-readable identification strings for a node."""
+    __slots__ = (
+        "manufacturer",
+        "model",
+        "hardware_version",
+        "software_version",
+        "user_name",
+        "user_description",
+    )
     def __init__(
         self,
         manufacturer: str = "svl-rr",
@@ -139,6 +153,7 @@ class SnipService:
     """
     Handles Simple Node Information Protocol (SNIP) requests and Protocol Identification (PIP).
     """
+    __slots__ = ("node_id", "alias_manager", "transport", "snip_data", "protocols")
     def __init__(self, node_id, alias_manager, transport, snip_data: SnipData = None, protocols: int = None):
         self.node_id = NodeID(node_id)
         self.alias_manager = alias_manager

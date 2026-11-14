@@ -103,24 +103,22 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Step-by-step JMRI integration guide (`docs/jmri_integration.md`) covering discovery, CDI configuration via DecoderPro, turnout/sensor tables, and wireless gateway connection.
   - MIT License (`LICENSE`).
 - [x] **Validation & Tooling**
-  - 75 automated unit tests (100% passing).
+  - 83 automated unit tests (100% passing).
   - Comprehensive runnable examples (`mock_lcc_hub`, `gridconnect_tcp_monitor`, `virtual_turnout_node`, `jmri_interactive_node`, `micropython_wifi_node`, `wifi_can_bridge`).
+- [x] **Optimizations & MicroPython Tuning (Performance & Memory)**
+  - [x] **Zero-Allocation Event Filtering (`pylcc/events.py`)**: Fast 8-byte dict lookups (`_consumers_by_bytes` / `_producers_by_bytes`) and synchronous `has_interest()` filtering without instantiating `EventID` objects.
+  - [x] **C-Speed Hex Conversion (`pylcc/gridconnect.py`)**: Uses `binascii.hexlify` / `unhexlify` (`ubinascii` on MicroPython) instead of Python character loops.
+  - [x] **Byte-Level Delimiter Scanning (`pylcc/gridconnect.py`)**: Pre-allocated `bytearray` buffer with C-speed `.find(b":")` / `.find(b";")` in `GridConnectParser`.
+  - [x] **Bitwise Header Unpacking Without Slices (`pylcc/can.py`, `pylcc/datagram.py`)**: Direct integer bit arithmetic in `destination_alias`, `make_addressed_message`, and NAK error unpacking.
+  - [x] **Cached Immutable Byte Serializations (`pylcc/node_id.py`, `pylcc/event_id.py`)**: Cached `_bytes` in `__slots__` so `to_bytes()` returns the existing reference.
+  - [x] **Stale Datagram Buffer Eviction & Zero-List Fragmentation (`pylcc/datagram.py`)**: Monotonic millisecond timeout eviction (3s default) and direct offset loop fragmentation.
+  - [x] **Bounded / Listener-Aware RX Queue (`pylcc/transport/base.py`)**: Eliminates unbounded `_rx_queue` memory leak when listeners are attached and caps unread queue capacity at 32 frames.
+  - [x] **Synchronous Fast-Path Routing (`pylcc/node.py`)**: Filters irrelevant frames synchronously before allocating `asyncio` tasks.
+  - [x] **Hardware Driver Optimization (`pylcc/hardware/mcp2518fd.py`, `esp32_twai.py`, `stm32_can.py`)**: Module-level sleep helpers, 8-frame burst FIFO draining, active-low `int_pin` check, and cached `TXQCON`/`FIFOCON1` writes.
+  - [x] **Zero-Copy Read-Only Spaces & `__slots__`/`const()` (`pylcc/memory.py`, `alias.py`, `snip.py`, `bridge.py`, `components/`)**: Avoids copying read-only CDI `bytes` and minimizes MicroPython RAM/bytecode overhead.
 
 ---
 
 ## Remaining Work
 
-### Optimizations & MicroPython Tuning (Performance & Memory)
-- [ ] **Zero-Allocation Event Filtering (`pylcc/events.py`)**:
-  - Filter incoming PCER event reports using fast 64-bit integer set lookups before instantiating `EventID` objects.
-  - Prevents heap allocations for unconsumed layout events on busy buses.
-- [ ] **C-Speed Hex Conversion (`pylcc/gridconnect.py`)**:
-  - Utilize built-in `ubinascii.hexlify` and `unhexlify` (or `bytes.fromhex`) to bypass Python character loops and generator overhead during frame encoding/decoding.
-- [ ] **Byte-Level Delimiter Scanning in `GridConnectParser` (`pylcc/gridconnect.py`)**:
-  - Replace per-character string decoding and list appending with a pre-allocated `bytearray` buffer and C-speed delimiter search (`find(b":")` / `find(b";")`).
-- [ ] **Bitwise Header Unpacking Without Slices (`pylcc/can.py`)**:
-  - Replace `self.data[:2]` byte slicing in `destination_alias` with direct integer bit arithmetic (`((self.data[0] << 8) | self.data[1]) & 0x0FFF`) to eliminate temporary slice allocations.
-- [ ] **Cached Immutable Byte Serializations (`pylcc/node_id.py`, `pylcc/event_id.py`)**:
-  - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
-- [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
-  - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
+None — all planned protocol features, hardware drivers, packaging, docs, and performance optimizations are complete!
