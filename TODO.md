@@ -93,13 +93,22 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - **STM32 Native CAN Driver (`pylcc.hardware.stm32_can`)**:
     - Direct interface to STM32 on-chip CAN controller via MicroPython's `pyb.CAN`.
     - Extended 32-bit filter mask accepting all 29-bit OpenLCB frames into FIFO 0.
+- [x] **Bidirectional CAN <-> WiFi Gateway Bridge (`pylcc.bridge.LCCBridge`)**
+  - Bidirectional frame bridging between any two `BaseTransport` instances (e.g. native CAN $\leftrightarrow$ GridConnect TCP).
+  - Transparent message forwarding, filtering loopback bounce, and real-time packet counter statistics.
+- [x] **Packaging, Distribution & Documentation (Step 8)**
+  - `pyproject.toml` (PEP 621) for desktop Python and pip installation.
+  - Modular MicroPython `mip` manifests (`package.json`, `package-esp32.json`, `package-pico.json`, `package-stm32.json`, `package-all.json`).
+  - Hardware wiring documentation (`docs/hardware_wiring.md`) with pinouts and connection diagrams for ESP32-C6, Raspberry Pi Pico RP2040/RP2350 + MCP2518FD, and STM32.
+  - Step-by-step JMRI integration guide (`docs/jmri_integration.md`) covering discovery, CDI configuration via DecoderPro, turnout/sensor tables, and wireless gateway connection.
+  - MIT License (`LICENSE`).
 - [x] **Validation & Tooling**
-  - 72 automated unit tests (100% passing).
-  - MicroPython bytecode compilation verified via `mpy-cross` across all modules.
+  - 75 automated unit tests (100% passing).
+  - Comprehensive runnable examples (`mock_lcc_hub`, `gridconnect_tcp_monitor`, `virtual_turnout_node`, `jmri_interactive_node`, `micropython_wifi_node`, `wifi_can_bridge`).
 
 ---
 
-### Remaining Work
+## Remaining Work
 
 ### Optimizations & MicroPython Tuning (Performance & Memory)
 - [ ] **Zero-Allocation Event Filtering (`pylcc/events.py`)**:
@@ -115,18 +124,3 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
 - [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
   - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
-
----
-
-### Step 8: Integration, Testing & Packaging
-- [ ] **JMRI End-to-End Validation**
-  - [ ] Test node discovery in JMRI OpenLCB Network Tree.
-  - [ ] Configure node parameters using JMRI DecoderPro CDI Tool.
-  - [ ] Test Turnout and Sensor table integration with live event updates.
-- [ ] **Hardware Wiring Diagrams & Documentation**
-  - [ ] ESP32-C6 + SN65HVD230 transceiver pinout.
-  - [ ] Raspberry Pi Pico + MCP2518FD SPI breakout pinout.
-  - [ ] STM32 CAN transceiver connection guide.
-- [ ] **Distribution & Packaging**
-  - [ ] `pyproject.toml` for standard `pip` installation on desktop Python.
-  - [ ] `package.json` manifest for MicroPython `mip` installation directly from GitHub.
