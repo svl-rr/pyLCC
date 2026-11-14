@@ -64,6 +64,7 @@ from .cdi import (
     CdiString,
 )
 from .node import Node, LCCNode
+from .bridge import LCCBridge
 from .components import (
     BaseComponent,
     Turnout,
@@ -144,6 +145,7 @@ __all__ = [
     "CdiString",
     "Node",
     "LCCNode",
+    "LCCBridge",
     "BaseComponent",
     "Turnout",
     "Sensor",

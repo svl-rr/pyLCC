@@ -126,7 +126,7 @@ The project includes a comprehensive test suite covering all layers:
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **72 automated tests (100% passing)**.*
+*Current test suite: **75 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All core modules are verified to compile cleanly with `mpy-cross` without desktop-only dependencies:
@@ -168,6 +168,13 @@ Connects directly to your WiFi network and communicates LCC over TCP with JMRI o
 ```python
 # Upload to ESP32 or Pico W and run in MicroPython:
 # python -m mpremote run examples/micropython_wifi_node.py
+```
+
+### 6. Run a Hardware WiFi <-> CAN Bridge Gateway (`LCCBridge`):
+Bridges your physical CAN bus (125 kbps) with wireless TCP clients (e.g. JMRI) on an ESP32 or Pico W + MCP2518FD:
+```python
+# Upload to ESP32 or Pico W and run in MicroPython:
+# python -m mpremote run examples/wifi_can_bridge.py
 ```
 
 ---
