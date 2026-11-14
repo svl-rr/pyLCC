@@ -13,7 +13,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 - [x] **Step 5: Memory Configuration Protocol & CDI XML**
 - [x] **Step 6: High-Level Node Abstraction & Application API**
 - [x] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
-- [ ] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
+- [x] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
 
 ---
 

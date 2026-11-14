@@ -1,0 +1,25 @@
+{
+  "urls": [
+    ["pylcc/__init__.py", "github:svl-rr/pyLCC/pylcc/__init__.py"],
+    ["pylcc/can.py", "github:svl-rr/pyLCC/pylcc/can.py"],
+    ["pylcc/gridconnect.py", "github:svl-rr/pyLCC/pylcc/gridconnect.py"],
+    ["pylcc/node_id.py", "github:svl-rr/pyLCC/pylcc/node_id.py"],
+    ["pylcc/event_id.py", "github:svl-rr/pyLCC/pylcc/event_id.py"],
+    ["pylcc/alias.py", "github:svl-rr/pyLCC/pylcc/alias.py"],
+    ["pylcc/events.py", "github:svl-rr/pyLCC/pylcc/events.py"],
+    ["pylcc/datagram.py", "github:svl-rr/pyLCC/pylcc/datagram.py"],
+    ["pylcc/snip.py", "github:svl-rr/pyLCC/pylcc/snip.py"],
+    ["pylcc/memory.py", "github:svl-rr/pyLCC/pylcc/memory.py"],
+    ["pylcc/cdi.py", "github:svl-rr/pyLCC/pylcc/cdi.py"],
+    ["pylcc/node.py", "github:svl-rr/pyLCC/pylcc/node.py"],
+    ["pylcc/bridge.py", "github:svl-rr/pyLCC/pylcc/bridge.py"],
+    ["pylcc/transport/__init__.py", "github:svl-rr/pyLCC/pylcc/transport/__init__.py"],
+    ["pylcc/transport/base.py", "github:svl-rr/pyLCC/pylcc/transport/base.py"],
+    ["pylcc/transport/tcp.py", "github:svl-rr/pyLCC/pylcc/transport/tcp.py"],
+    ["pylcc/transport/loopback.py", "github:svl-rr/pyLCC/pylcc/transport/loopback.py"],
+    ["pylcc/components/__init__.py", "github:svl-rr/pyLCC/pylcc/components/__init__.py"],
+    ["pylcc/components/base.py", "github:svl-rr/pyLCC/pylcc/components/base.py"],
+    ["pylcc/components/devices.py", "github:svl-rr/pyLCC/pylcc/components/devices.py"]
+  ],
+  "version": "0.1.0"
+}
