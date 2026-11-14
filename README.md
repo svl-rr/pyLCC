@@ -126,7 +126,7 @@ The project includes a comprehensive test suite covering all layers:
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **57 automated tests (100% passing)**.*
+*Current test suite: **72 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All core modules are verified to compile cleanly with `mpy-cross` without desktop-only dependencies:
@@ -163,8 +163,15 @@ Features Turnouts, Track Sensors, a 3-Aspect Signal Mast, Yard Lighting, and cus
 python3 examples/jmri_interactive_node.py 127.0.0.1 12021
 ```
 
+### 5. Run a Wireless Node on WiFi Microcontrollers (ESP32 / Pico W):
+Connects directly to your WiFi network and communicates LCC over TCP with JMRI or an LCC Hub (no CAN transceivers required):
+```python
+# Upload to ESP32 or Pico W and run in MicroPython:
+# python -m mpremote run examples/micropython_wifi_node.py
+```
+
 ---
 
 ## Project Roadmap
 
-See [TODO.md](TODO.md) for the detailed implementation roadmap and upcoming hardware drivers (ESP32-C6 TWAI, Raspberry Pi Pico MCP2518FD SPI, STM32 CAN).
+See [TODO.md](TODO.md) for the detailed implementation roadmap and completed milestones (Steps 1–7 complete; Step 8 packaging next).

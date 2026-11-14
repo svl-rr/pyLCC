@@ -27,6 +27,11 @@ class GridConnectTcpClient(BaseTransport):
         self._rx_task = None
         self._parser = GridConnectParser()
 
+    @property
+    def is_connected(self) -> bool:
+        """True if the TCP socket is currently open and connected."""
+        return self.writer is not None and not self.is_closed
+
     async def connect(self):
         """Open TCP socket connection and start background receiver loop."""
         self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
@@ -97,6 +102,15 @@ class GridConnectTcpServer(BaseTransport):
         self.server = None
         self._clients = set()
         self._client_parsers = {}
+
+    @property
+    def is_connected(self) -> bool:
+        """True if the TCP server is currently running."""
+        return self.server is not None and not self.is_closed
+
+    async def connect(self):
+        """Alias for start() to provide unified BaseTransport lifecycle."""
+        await self.start()
 
     async def start(self):
         """Start listening for incoming TCP GridConnect connections."""
