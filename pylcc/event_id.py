@@ -71,6 +71,37 @@ class EventID:
         """Convenience factory: derive EventID from a NodeID and 16-bit integer index."""
         return cls(node_id, index)
 
+    @classmethod
+    def encode_range(cls, base_event_id, size: int) -> "EventID":
+        """
+        Encode a contiguous power-of-two block of events as an OpenLCB range EventID
+        per NMRA S-9.7.3.1 Section 4.4.
+        """
+        if size < 2 or (size & (size - 1)) != 0:
+            raise ValueError(f"Range size must be a power of 2 >= 2 (got {size})")
+        mask = size - 1
+        base_val = cls(base_event_id).value & ~mask
+        range_val = base_val if (base_val & size) else (base_val | mask)
+        return cls(range_val)
+
+    @classmethod
+    def decode_range(cls, range_event_id) -> tuple:
+        """
+        Decode an OpenLCB range EventID into (base_event_id, size, mask)
+        per NMRA S-9.7.3.1 Section 4.4.
+        """
+        val = cls(range_event_id).value
+        low_bit = val & 1
+        n = 0
+        tmp = val
+        while n < 64 and (tmp & 1) == low_bit:
+            tmp >>= 1
+            n += 1
+        size = 1 << n
+        mask = size - 1
+        base_val = val & ~mask
+        return cls(base_val), size, mask
+
     def __eq__(self, other) -> bool:
         if isinstance(other, EventID):
             return self._value == other._value

@@ -12,8 +12,11 @@ from pylcc.events import (
     MTI_IDENTIFY_CONSUMER,
     MTI_IDENTIFY_PRODUCER,
     MTI_CONSUMER_IDENTIFIED_VALID,
-    MTI_PRODUCER_IDENTIFIED_VALID,
     MTI_CONSUMER_IDENTIFIED_UNKNOWN,
+    MTI_CONSUMER_RANGE_IDENTIFIED,
+    MTI_PRODUCER_IDENTIFIED_VALID,
+    MTI_PRODUCER_IDENTIFIED_UNKNOWN,
+    MTI_PRODUCER_RANGE_IDENTIFIED,
     MTI_IDENTIFY_EVENTS_GLOBAL,
     MTI_IDENTIFY_EVENTS_ADDRESSED,
 )
@@ -47,6 +50,26 @@ class TestEventID(unittest.TestCase):
             EventID(b"\x01\x02\x03")  # Not 8 bytes
         with self.assertRaises(ValueError):
             EventID("05.01.01")  # Bad string
+
+    def test_encode_and_decode_range(self):
+        # Range of 16 events starting at ...00.00 (bit 4 is 0 -> low 4 bits become 1)
+        rng0 = EventID.encode_range("05.01.01.01.14.01.00.00", 16)
+        self.assertEqual(str(rng0), "05.01.01.01.14.01.00.0F")
+        base, size, mask = EventID.decode_range(rng0)
+        self.assertEqual(str(base), "05.01.01.01.14.01.00.00")
+        self.assertEqual(size, 16)
+        self.assertEqual(mask, 0x0F)
+
+        # Range of 16 events starting at ...00.10 (bit 4 is 1 -> low 4 bits become 0)
+        rng1 = EventID.encode_range("05.01.01.01.14.01.00.10", 16)
+        self.assertEqual(str(rng1), "05.01.01.01.14.01.00.10")
+        base1, size1, mask1 = EventID.decode_range(rng1)
+        self.assertEqual(str(base1), "05.01.01.01.14.01.00.10")
+        self.assertEqual(size1, 16)
+        self.assertEqual(mask1, 0x0F)
+
+        with self.assertRaises(ValueError):
+            EventID.encode_range("05.01.01.01.14.01.00.00", 10)  # Not power of 2
 
 
 class TestEventManager(unittest.IsolatedAsyncioTestCase):
@@ -150,6 +173,90 @@ class TestEventManager(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.05)
 
         self.assertEqual(len(tester_rx), 2)
+
+        await t_node.close()
+        await t_tester.close()
+
+    async def test_consumer_and_producer_ranges(self):
+        """Test registering power-of-two Consumer/Producer ranges and Range Identified frames."""
+        bus = LoopbackBus()
+        t_node = LoopbackTransport(bus)
+        t_tester = LoopbackTransport(bus)
+
+        alias_mgr = AliasManager("05.01.01.01.14.01", t_node)
+        await alias_mgr.allocate(check_delay_ms=10)
+
+        event_mgr = EventManager("05.01.01.01.14.01", alias_mgr, t_node)
+        t_node.add_listener(lambda f: asyncio.create_task(event_mgr.process_frame(f)))
+
+        range_events_rx = []
+        event_mgr.register_consumer_range(
+            "05.01.01.01.14.01.01.00",
+            16,
+            callback=lambda eid: range_events_rx.append(eid),
+        )
+        event_mgr.register_producer_range("05.01.01.01.14.01.02.00", 8)
+
+        self.assertTrue(event_mgr.is_consumer("05.01.01.01.14.01.01.05"))
+        self.assertFalse(event_mgr.is_consumer("05.01.01.01.14.01.01.10"))
+        self.assertTrue(event_mgr.is_producer("05.01.01.01.14.01.02.07"))
+        self.assertFalse(event_mgr.is_producer("05.01.01.01.14.01.02.08"))
+
+        tester_rx = []
+        t_tester.add_listener(lambda f: tester_rx.append(f))
+
+        # 1. PCER matching inside consumer range triggers callback
+        pcer_in = CanFrame.make_global_message(
+            MTI_PCER,
+            0x999,
+            EventID("05.01.01.01.14.01.01.0A").to_bytes(),
+        )
+        pcer_out = CanFrame.make_global_message(
+            MTI_PCER,
+            0x999,
+            EventID("05.01.01.01.14.01.01.10").to_bytes(),
+        )
+        self.assertTrue(event_mgr.has_interest(pcer_in))
+        self.assertFalse(event_mgr.has_interest(pcer_out))
+        await t_tester.send_frame(pcer_in)
+        await t_tester.send_frame(pcer_out)
+        await asyncio.sleep(0.05)
+
+        self.assertEqual(len(range_events_rx), 1)
+        self.assertEqual(range_events_rx[0], EventID("05.01.01.01.14.01.01.0A"))
+
+        # 2. Identify Consumer/Producer matching inside ranges responds
+        tester_rx.clear()
+        await t_tester.send_frame(
+            CanFrame.make_global_message(
+                MTI_IDENTIFY_CONSUMER,
+                0x999,
+                EventID("05.01.01.01.14.01.01.03").to_bytes(),
+            )
+        )
+        await t_tester.send_frame(
+            CanFrame.make_global_message(
+                MTI_IDENTIFY_PRODUCER,
+                0x999,
+                EventID("05.01.01.01.14.01.02.04").to_bytes(),
+            )
+        )
+        await asyncio.sleep(0.05)
+        self.assertEqual(
+            {f.mti for f in tester_rx},
+            {MTI_CONSUMER_IDENTIFIED_UNKNOWN, MTI_PRODUCER_IDENTIFIED_UNKNOWN},
+        )
+
+        # 3. Identify Events Global emits Consumer Range Identified (0x04A4) & Producer Range Identified (0x0524)
+        tester_rx.clear()
+        await t_tester.send_frame(CanFrame.make_global_message(MTI_IDENTIFY_EVENTS_GLOBAL, 0x999))
+        await asyncio.sleep(0.05)
+
+        mti_map = {f.mti: f.data for f in tester_rx}
+        self.assertIn(MTI_CONSUMER_RANGE_IDENTIFIED, mti_map)
+        self.assertIn(MTI_PRODUCER_RANGE_IDENTIFIED, mti_map)
+        self.assertEqual(EventID(mti_map[MTI_CONSUMER_RANGE_IDENTIFIED]), EventID("05.01.01.01.14.01.01.0F"))
+        self.assertEqual(EventID(mti_map[MTI_PRODUCER_RANGE_IDENTIFIED]), EventID("05.01.01.01.14.01.02.07"))
 
         await t_node.close()
         await t_tester.close()

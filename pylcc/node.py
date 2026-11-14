@@ -19,8 +19,12 @@ from .memory import (
     MemoryConfigurationService,
     SPACE_CDI,
     SPACE_CONFIG,
+    SPACE_ACDI_MFG,
+    SPACE_ACDI_USER,
     BytesMemorySpace,
     ConfigMemorySpace,
+    AcdiManufacturerSpace,
+    AcdiUserSpace,
 )
 from .cdi import CdiDocument
 from .components.base import BaseComponent
@@ -69,7 +73,12 @@ class Node:
         if self.on_restart:
             self.memory_service.set_on_restart(self.on_restart)
 
-        # Memory spaces
+        # Memory spaces (register ACDI Mfg 0xFC and User 0xFB by default)
+        self.acdi_mfg_space = AcdiManufacturerSpace(self.snip_data)
+        self.acdi_user_space = AcdiUserSpace(self.snip_data)
+        self.memory_service.register_space(self.acdi_mfg_space)
+        self.memory_service.register_space(self.acdi_user_space)
+
         self.cdi_space = None
         self.config_space = None
         if self.cdi_doc:
@@ -259,6 +268,9 @@ class Node:
         )
         await self.transport.send_frame(init_frame)
 
+        # Announce any registered Consumer/Producer Event Ranges
+        await self.event_manager.broadcast_ranges()
+
         self._is_started = True
 
     async def stop(self):
@@ -294,6 +306,14 @@ class Node:
     def register_producer(self, event_id, state: int = EVENT_STATE_UNKNOWN):
         """Register a produced EventID with initial state."""
         self.event_manager.register_producer(event_id, state=state)
+
+    def register_consumer_range(self, base_event_id, size: int, callback=None):
+        """Register a contiguous power-of-two consumer EventID range (0x04A4)."""
+        return self.event_manager.register_consumer_range(base_event_id, size, callback=callback)
+
+    def register_producer_range(self, base_event_id, size: int):
+        """Register a contiguous power-of-two producer EventID range (0x0524)."""
+        return self.event_manager.register_producer_range(base_event_id, size)
 
     async def send_datagram(self, dest_alias: int, data: bytes, timeout_ms: int = 3000) -> bool:
         """Send a datagram to target node alias."""

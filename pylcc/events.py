@@ -63,11 +63,30 @@ class EventProducer:
         self.state = state
 
 
+class EventRange:
+    """Represents a contiguous power-of-two block of EventIDs (S-9.7.3.1)."""
+    __slots__ = ("base_val", "size", "mask", "range_event_id", "callback")
+
+    def __init__(self, base_event_id, size: int, callback=None):
+        range_eid = EventID.encode_range(base_event_id, size)
+        base_eid, sz, mask = EventID.decode_range(range_eid)
+        self.base_val = base_eid.value
+        self.size = sz
+        self.mask = mask
+        self.range_event_id = range_eid
+        self.callback = callback
+
+    def contains(self, event_val: int) -> bool:
+        """True if 64-bit integer event_val belongs to this range."""
+        return (event_val & ~self.mask) == self.base_val
+
+
 class EventManager:
     """
     Manages OpenLCB Event Transport for a node:
     - Registers local consumers (with callbacks invoked on PCER arrival).
     - Registers local producers and broadcasts PCER events across the bus.
+    - Supports Consumer/Producer Event Ranges (0x04A4 / 0x0524).
     - Responds to Identify Consumer, Identify Producer, and Identify Events queries.
     """
     __slots__ = (
@@ -78,6 +97,8 @@ class EventManager:
         "_producers",
         "_consumers_by_bytes",
         "_producers_by_bytes",
+        "_consumer_ranges",
+        "_producer_ranges",
     )
 
     def __init__(self, node_id, alias_manager, transport):
@@ -88,6 +109,8 @@ class EventManager:
         self._producers = {}           # EventID -> EventProducer
         self._consumers_by_bytes = {}  # 8-byte bytes -> EventConsumer
         self._producers_by_bytes = {}  # 8-byte bytes -> EventProducer
+        self._consumer_ranges = []     # [EventRange]
+        self._producer_ranges = []     # [EventRange]
 
     @property
     def source_alias(self) -> int:
@@ -109,11 +132,29 @@ class EventManager:
         self._consumers.pop(eid, None)
         self._consumers_by_bytes.pop(eid.to_bytes(), None)
 
+    def register_consumer_range(self, base_event_id, size: int, callback=None) -> EventRange:
+        """Register a contiguous power-of-two consumer EventID range."""
+        rng = EventRange(base_event_id, size, callback=callback)
+        self._consumer_ranges.append(rng)
+        return rng
+
     def is_consumer(self, event_id) -> bool:
-        """True if this node consumes the specified EventID."""
+        """True if this node consumes the specified EventID (exact or range)."""
         if isinstance(event_id, (bytes, bytearray)) and len(event_id) == 8:
-            return bytes(event_id) in self._consumers_by_bytes
-        return EventID(event_id) in self._consumers
+            raw = bytes(event_id)
+            if raw in self._consumers_by_bytes:
+                return True
+            if self._consumer_ranges:
+                val = int.from_bytes(raw, "big")
+                return any(r.contains(val) for r in self._consumer_ranges)
+            return False
+        eid = EventID(event_id)
+        if eid in self._consumers:
+            return True
+        if self._consumer_ranges:
+            val = eid.value
+            return any(r.contains(val) for r in self._consumer_ranges)
+        return False
 
     def set_consumer_state(self, event_id, state: int):
         """Update consumer validity state (VALID, INVALID, or UNKNOWN)."""
@@ -140,11 +181,29 @@ class EventManager:
         self._producers.pop(eid, None)
         self._producers_by_bytes.pop(eid.to_bytes(), None)
 
+    def register_producer_range(self, base_event_id, size: int) -> EventRange:
+        """Register a contiguous power-of-two producer EventID range."""
+        rng = EventRange(base_event_id, size)
+        self._producer_ranges.append(rng)
+        return rng
+
     def is_producer(self, event_id) -> bool:
-        """True if this node produces the specified EventID."""
+        """True if this node produces the specified EventID (exact or range)."""
         if isinstance(event_id, (bytes, bytearray)) and len(event_id) == 8:
-            return bytes(event_id) in self._producers_by_bytes
-        return EventID(event_id) in self._producers
+            raw = bytes(event_id)
+            if raw in self._producers_by_bytes:
+                return True
+            if self._producer_ranges:
+                val = int.from_bytes(raw, "big")
+                return any(r.contains(val) for r in self._producer_ranges)
+            return False
+        eid = EventID(event_id)
+        if eid in self._producers:
+            return True
+        if self._producer_ranges:
+            val = eid.value
+            return any(r.contains(val) for r in self._producer_ranges)
+        return False
 
     def set_producer_state(self, event_id, state: int):
         """Update producer validity state (VALID, INVALID, or UNKNOWN)."""
@@ -223,13 +282,28 @@ class EventManager:
             return False
         mti = frame.mti
         if mti == MTI_PCER or mti == MTI_IDENTIFY_CONSUMER:
-            return len(frame.data) == 8 and frame.data in self._consumers_by_bytes
+            if len(frame.data) != 8:
+                return False
+            if frame.data in self._consumers_by_bytes:
+                return True
+            if self._consumer_ranges:
+                val = int.from_bytes(frame.data, "big")
+                return any(r.contains(val) for r in self._consumer_ranges)
+            return False
         if mti == MTI_IDENTIFY_PRODUCER:
-            return len(frame.data) == 8 and frame.data in self._producers_by_bytes
+            if len(frame.data) != 8:
+                return False
+            if frame.data in self._producers_by_bytes:
+                return True
+            if self._producer_ranges:
+                val = int.from_bytes(frame.data, "big")
+                return any(r.contains(val) for r in self._producer_ranges)
+            return False
+        has_any = bool(self._consumers or self._producers or self._consumer_ranges or self._producer_ranges)
         if mti == MTI_IDENTIFY_EVENTS_GLOBAL:
-            return bool(self._consumers or self._producers)
+            return has_any
         if mti == MTI_IDENTIFY_EVENTS_ADDRESSED:
-            return frame.destination_alias == self.source_alias and bool(self._consumers or self._producers)
+            return frame.destination_alias == self.source_alias and has_any
         return False
 
     async def process_frame(self, frame: CanFrame):
@@ -253,18 +327,55 @@ class EventManager:
                 except Exception:
                     # Callback errors should not crash the stack
                     pass
+            if self._consumer_ranges:
+                event_val = int.from_bytes(frame.data, "big")
+                eid = None
+                for rng in self._consumer_ranges:
+                    if rng.contains(event_val) and rng.callback:
+                        if eid is None:
+                            eid = EventID(frame.data)
+                        try:
+                            res = rng.callback(eid)
+                            if hasattr(res, "__await__"):
+                                await res
+                        except Exception:
+                            pass
 
         # 2. Identify Consumer
         elif mti == MTI_IDENTIFY_CONSUMER and len(frame.data) == 8:
             consumer = self._consumers_by_bytes.get(frame.data)
             if consumer:
                 await self._send_consumer_identified(consumer)
+            elif self._consumer_ranges:
+                event_val = int.from_bytes(frame.data, "big")
+                for rng in self._consumer_ranges:
+                    if rng.contains(event_val):
+                        await self.transport.send_frame(
+                            CanFrame.make_global_message(
+                                mti=MTI_CONSUMER_IDENTIFIED_UNKNOWN,
+                                source_alias=self.source_alias,
+                                data=frame.data,
+                            )
+                        )
+                        break
 
         # 3. Identify Producer
         elif mti == MTI_IDENTIFY_PRODUCER and len(frame.data) == 8:
             producer = self._producers_by_bytes.get(frame.data)
             if producer:
                 await self._send_producer_identified(producer)
+            elif self._producer_ranges:
+                event_val = int.from_bytes(frame.data, "big")
+                for rng in self._producer_ranges:
+                    if rng.contains(event_val):
+                        await self.transport.send_frame(
+                            CanFrame.make_global_message(
+                                mti=MTI_PRODUCER_IDENTIFIED_UNKNOWN,
+                                source_alias=self.source_alias,
+                                data=frame.data,
+                            )
+                        )
+                        break
 
         # 4. Identify Events Global
         elif mti == MTI_IDENTIFY_EVENTS_GLOBAL:
@@ -307,9 +418,35 @@ class EventManager:
         )
         await self.transport.send_frame(frame)
 
+    async def _send_consumer_range_identified(self, event_range: EventRange):
+        """Send Consumer Range Identified (0x04A4) frame."""
+        frame = CanFrame.make_global_message(
+            mti=MTI_CONSUMER_RANGE_IDENTIFIED,
+            source_alias=self.source_alias,
+            data=event_range.range_event_id.to_bytes(),
+        )
+        await self.transport.send_frame(frame)
+
+    async def _send_producer_range_identified(self, event_range: EventRange):
+        """Send Producer Range Identified (0x0524) frame."""
+        frame = CanFrame.make_global_message(
+            mti=MTI_PRODUCER_RANGE_IDENTIFIED,
+            source_alias=self.source_alias,
+            data=event_range.range_event_id.to_bytes(),
+        )
+        await self.transport.send_frame(frame)
+
+    async def broadcast_ranges(self):
+        """Broadcast Consumer/Producer Range Identified frames for all registered ranges."""
+        for rng in self._consumer_ranges:
+            await self._send_consumer_range_identified(rng)
+        for rng in self._producer_ranges:
+            await self._send_producer_range_identified(rng)
+
     async def _respond_all_events(self):
-        """Enumerate all registered consumers and producers in response to Identify Events."""
+        """Enumerate all registered consumers, producers, and ranges in response to Identify Events."""
         for consumer in self._consumers.values():
             await self._send_consumer_identified(consumer)
         for producer in self._producers.values():
             await self._send_producer_identified(producer)
+        await self.broadcast_ranges()

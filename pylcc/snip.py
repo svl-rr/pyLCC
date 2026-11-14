@@ -168,6 +168,7 @@ class SnipService:
                 PIP_SIMPLE_NODE
                 | PIP_DATAGRAM
                 | PIP_EVENT_EXCHANGE
+                | PIP_ACDI
                 | PIP_SNIP
                 | PIP_MEMORY_CONFIG
                 | PIP_CDI

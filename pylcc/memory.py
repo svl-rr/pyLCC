@@ -237,6 +237,130 @@ class ConfigMemorySpace(MemorySpace):
         self.write(offset, padded)
 
 
+def _decode_cstr(raw) -> str:
+    """Decode a null-terminated UTF-8 (fallback Latin-1) byte sequence."""
+    null_pos = raw.find(b"\x00")
+    if null_pos != -1:
+        raw = raw[:null_pos]
+    try:
+        return bytes(raw).decode("utf-8")
+    except Exception:
+        return bytes(raw).decode("latin-1", "replace")
+
+
+class AcdiManufacturerSpace(MemorySpace):
+    """
+    ACDI Manufacturer Information Space (Space 0xFC / 252, Read-Only, 125 bytes).
+    Fixed binary layout per NMRA S-9.7.4.3 backed by SnipData.
+    """
+    __slots__ = ("snip_data",)
+
+    def __init__(self, snip_data):
+        super().__init__(SPACE_ACDI_MFG, read_only=True)
+        self.snip_data = snip_data
+
+    def _encode_table(self) -> bytes:
+        buf = bytearray(125)
+        buf[0] = 0x04  # ACDI manufacturer version
+
+        fields = (
+            (1, 41, self.snip_data.manufacturer),
+            (42, 41, self.snip_data.model),
+            (83, 21, self.snip_data.hardware_version),
+            (104, 21, self.snip_data.software_version),
+        )
+        for offset, width, text in fields:
+            raw = (text or "").encode("ascii", "replace")[:width - 1]
+            buf[offset:offset + len(raw)] = raw
+        return bytes(buf)
+
+    def read(self, address: int, count: int) -> bytes:
+        if address >= 125:
+            return b""
+        return self._encode_table()[address:min(address + count, 125)]
+
+    def get_size(self) -> int:
+        return 125
+
+
+class AcdiUserSpace(MemorySpace):
+    """
+    ACDI User Information Space (Space 0xFB / 251, Read/Write, 128 bytes).
+    Fixed binary layout per NMRA S-9.7.4.3 synchronized live with SnipData.
+    """
+    __slots__ = ("snip_data", "filename", "on_write", "_data")
+
+    def __init__(self, snip_data, filename: str = None, on_write=None):
+        super().__init__(SPACE_ACDI_USER, read_only=False)
+        self.snip_data = snip_data
+        self.filename = filename
+        self.on_write = on_write
+        self._data = bytearray(128)
+        self._sync_from_snip()
+        if self.filename:
+            self.load()
+
+    def _sync_from_snip(self):
+        self._data[0] = 2  # ACDI user info version
+        uname = (self.snip_data.user_name or "").encode("utf-8")[:62]
+        self._data[1:64] = uname + b"\x00" * (63 - len(uname))
+        udesc = (self.snip_data.user_description or "").encode("utf-8")[:63]
+        self._data[64:128] = udesc + b"\x00" * (64 - len(udesc))
+
+    def _sync_to_snip(self):
+        self.snip_data.user_name = _decode_cstr(self._data[1:64])
+        self.snip_data.user_description = _decode_cstr(self._data[64:128])
+
+    def load(self):
+        """Load ACDI user space from flash storage if present."""
+        try:
+            with open(self.filename, "rb") as f:
+                content = f.read(128)
+                self._data[:len(content)] = content
+                self._data[0] = 2
+                self._sync_to_snip()
+        except (OSError, Exception):
+            pass
+
+    def save(self):
+        """Persist ACDI user space to flash storage."""
+        if not self.filename:
+            return
+        try:
+            with open(self.filename, "wb") as f:
+                f.write(self._data)
+        except (OSError, Exception):
+            pass
+
+    def read(self, address: int, count: int) -> bytes:
+        if address >= 128:
+            return b""
+        self._sync_from_snip()
+        return bytes(self._data[address:min(address + count, 128)])
+
+    def write(self, address: int, data: bytes) -> bool:
+        if address >= 128:
+            return False
+        self._sync_from_snip()
+        limit = min(len(data), 128 - address)
+        self._data[address:address + limit] = data[:limit]
+        self._data[0] = 2
+        self._sync_to_snip()
+
+        if self.on_write:
+            try:
+                self.on_write(address, data[:limit])
+            except Exception:
+                pass
+
+        if self.filename:
+            self.save()
+        return True
+
+    def get_size(self) -> int:
+        return 128
+
+
 class MemoryConfigurationService:
     """
     Handles OpenLCB Memory Configuration Datagrams (Protocol 0x20).
@@ -438,7 +562,14 @@ class MemoryConfigurationService:
         # Bit 12: Space 0xFD supported in 0x43/0x03 commands (0x1000)
         # Bit 11: Space 0xFE supported in 0x42/0x02 commands (0x0800)
         # Bit 10: Space 0xFF supported in 0x41/0x01 commands (0x0400)
+        # Bit 9:  Space 0xFC (ACDI Mfg) read supported (0x0200)
+        # Bit 8:  Space 0xFB (ACDI User) read/write supported (0x0100)
         options_flags = 0x4000 | 0x2000 | 0x1000 | 0x0800 | 0x0400
+        if SPACE_ACDI_MFG in self._spaces:
+            options_flags |= 0x0200
+        if SPACE_ACDI_USER in self._spaces:
+            options_flags |= 0x0100
+
         # Write lengths:
         # Bit 7: Arbitrary write length (0x80)
         # Bit 3: 64-byte write (0x08)
@@ -448,8 +579,12 @@ class MemoryConfigurationService:
         write_lengths = 0x8F
 
         # Highest and lowest available spaces
-        highest_space = SPACE_CDI      # 0xFF
-        lowest_space = SPACE_CONFIG    # 0xFD
+        if self._spaces:
+            highest_space = max(self._spaces.keys())
+            lowest_space = min(self._spaces.keys())
+        else:
+            highest_space = SPACE_CDI
+            lowest_space = SPACE_CONFIG
 
         reply = bytearray([
             DATAGRAM_PROTOCOL_MEMORY_CONFIG,

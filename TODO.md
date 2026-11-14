@@ -43,13 +43,14 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Active defense transmitting `RID` against newcomers probing with `CID`.
   - Handling of `AME` queries and release with `AMR`.
 - [x] **Event Transport (`pylcc.event_id`, `pylcc.events`)**
-  - 64-bit `EventID` model with `EventID.from_node_id(node_id, index)`.
+  - 64-bit `EventID` model with `EventID.from_node_id(node_id, index)` and `encode_range()` / `decode_range()`.
   - `EventManager` for registering local consumers (with sync/async callbacks) and producers.
+  - Power-of-two Consumer & Producer Event Ranges with **Consumer/Producer Range Identified** (`0x04A4` / `0x0524`) announcements on startup and queries.
   - Broadcasting Producer/Consumer Event Reports (`PCER` - `0x05B4`).
   - Automatic query responses for:
     - Identify Consumer (`0x08F4`) $\to$ `Consumer Identified` (`0x04C4`/`0x04C5`/`0x04C7`).
     - Identify Producer (`0x0914`) $\to$ `Producer Identified` (`0x0544`/`0x0545`/`0x0547`).
-    - Identify Events Global (`0x0976`) & Addressed (`0x0968`) $\to$ full event enumeration.
+    - Identify Events Global (`0x0976`) & Addressed (`0x0968`) $\to$ full event & range enumeration.
 - [x] **Datagram Transport (`pylcc.datagram`) (NMRA Standard S-9.7.3.2 / S-9.7.2.1)**
   - Multi-frame fragmentation and reassembly up to 72 bytes across 8-byte CAN frames.
   - Flow control with automatic `Datagram Received OK` (`0x0A28`) and `Datagram Rejected` (`0x0A48`) NAK with error codes.
@@ -59,8 +60,8 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - `SnipData` model and encoder/decoder (Manufacturer, Model, Hardware/Software versions, User Name & Description).
   - `SnipService`: Streams SNIP reply frames (`0x0A08`) in response to `0x0DE8`.
   - Protocol Support Inquiry (`PIP` - `0x0828`) handler replying with capability bitmask (`0x0668`).
-- [x] **Memory Configuration Protocol & CDI XML (`pylcc.memory`, `pylcc.cdi`) (S-9.7.4.2 / S-9.7.4.1)**
-  - `MemorySpace`, `BytesMemorySpace`, and `ConfigMemorySpace` storage backends.
+- [x] **Memory Configuration Protocol, ACDI & CDI XML (`pylcc.memory`, `pylcc.cdi`) (S-9.7.4.2 / S-9.7.4.1 / S-9.7.4.3)**
+  - `MemorySpace`, `BytesMemorySpace`, `ConfigMemorySpace`, `AcdiManufacturerSpace` (`0xFC`), and `AcdiUserSpace` (`0xFB`) storage backends synced live with `SnipData`.
   - Configuration Datagram (0x20) handler (`MemoryConfigurationService`):
     - Memory Read (`0x40` generic, `0x41` CDI, `0x42` All-Memory, `0x43` Config) $\to$ Read Replies (`0x50`, `0x51`, `0x52`, `0x53`) and Failure (`0x58`).
     - Memory Write (`0x00` generic, `0x03` Config) $\to$ Write Replies (`0x10`, `0x13`) and Failure (`0x18`).
@@ -103,7 +104,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Step-by-step JMRI integration guide (`docs/jmri_integration.md`) covering discovery, CDI configuration via DecoderPro, turnout/sensor tables, and wireless gateway connection.
   - MIT License (`LICENSE`).
 - [x] **Validation & Tooling**
-  - 83 automated unit tests (100% passing).
+  - 87 automated unit tests (100% passing).
   - Comprehensive runnable examples (`mock_lcc_hub`, `gridconnect_tcp_monitor`, `virtual_turnout_node`, `jmri_interactive_node`, `micropython_wifi_node`, `wifi_can_bridge`).
 - [x] **Optimizations & MicroPython Tuning (Performance & Memory)**
   - [x] **Zero-Allocation Event Filtering (`pylcc/events.py`)**: Fast 8-byte dict lookups (`_consumers_by_bytes` / `_producers_by_bytes`) and synchronous `has_interest()` filtering without instantiating `EventID` objects.

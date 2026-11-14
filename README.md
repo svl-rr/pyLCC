@@ -107,9 +107,9 @@ mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bun
 - **Alias State Machine (`AliasManager`)**: Full lifecycle (`INHIBITED` $\to$ `CHECKING` $\to$ `PERMITTED`), 100 ms conflict observation timer, active defense transmitting `RID` against colliding newcomers, and graceful release with `AMR`.
 
 ### Step 3: Event Transport Protocol (`pylcc.event_id`, `pylcc.events`)
-- **Event ID Model (`EventID`)**: 64-bit unique identifier (`05.01.01.01.14.00.00.01`).
+- **Event ID Model (`EventID`)**: 64-bit unique identifier (`05.01.01.01.14.00.00.01`) with `encode_range()` / `decode_range()` helpers (NMRA S-9.7.3.1).
 - **Event Manager (`EventManager`)**: Producer/Consumer registry broadcasting Producer/Consumer Event Reports (**PCER** `0x05B4`).
-- **Discovery & Query Handling**: Responds to **Identify Consumer** (`0x08F4`), **Identify Producer** (`0x0914`), and **Identify Events Global** (`0x0976`) / **Addressed** (`0x0968`).
+- **Event Ranges & Discovery**: Supports power-of-two consumer/producer event ranges announcing **Consumer/Producer Range Identified** (`0x04A4` / `0x0524`) and responding to **Identify Consumer** (`0x08F4`), **Identify Producer** (`0x0914`), and **Identify Events Global** (`0x0976`) / **Addressed** (`0x0968`).
 
 ### Step 4: Datagram Transport & SNIP Engine (`pylcc.datagram`, `pylcc.snip`)
 - **Datagram Transport Protocol (`DatagramManager`) (NMRA S-9.7.3.2 / S-9.7.2.1)**:
@@ -121,8 +121,9 @@ mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bun
   - Streams SNIP replies (`0x0A08`) in response to inquiry (`0x0DE8`).
   - Protocol Support Inquiry (**PIP** `0x0828` $\to$ `0x0668`).
 
-### Step 5: Memory Configuration Protocol & CDI XML (`pylcc.memory`, `pylcc.cdi`)
+### Step 5: Memory Configuration Protocol, ACDI & CDI XML (`pylcc.memory`, `pylcc.cdi`)
 - **Memory Configuration Engine (`MemoryConfigurationService`) (NMRA S-9.7.4.2)**:
+  - Serves standard spaces including Config (`0xFD`), CDI (`0xFF`), and **ACDI Spaces (`0xFC` Manufacturer / `0xFB` User)** live-synchronized with `SnipData`.
   - Handles Datagram Protocol `0x20` commands:
     - **Memory Read** (`0x40` generic, `0x41` CDI, `0x42` All-Memory, `0x43` Config Memory) $\to$ **Read Reply** (`0x50`..`0x53`) or Failure (`0x58`).
     - **Memory Write** (`0x00`, `0x03`) $\to$ **Write Reply** (`0x10`, `0x13`) or Failure (`0x18`).
@@ -165,7 +166,7 @@ The project includes a comprehensive test suite covering all protocol layers, ha
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **83 automated tests (100% passing)**.*
+*Current test suite: **87 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All modules are designed for clean compilation with `mpy-cross` without desktop-only dependencies:

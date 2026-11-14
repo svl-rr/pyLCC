@@ -18,11 +18,15 @@ from pylcc.memory import (
     MemorySpace,
     BytesMemorySpace,
     ConfigMemorySpace,
+    AcdiManufacturerSpace,
+    AcdiUserSpace,
     MemoryConfigurationService,
     DATAGRAM_PROTOCOL_MEMORY_CONFIG,
     SPACE_CDI,
     SPACE_ALL_MEMORY,
     SPACE_CONFIG,
+    SPACE_ACDI_MFG,
+    SPACE_ACDI_USER,
     CMD_READ_GENERIC,
     CMD_READ_CDI,
     CMD_READ_CONFIG,
@@ -41,6 +45,7 @@ from pylcc.memory import (
     CMD_SPACE_INFO_REPLY,
     CMD_RESTART,
 )
+from pylcc.snip import SnipData
 from pylcc.cdi import (
     CdiDocument,
     CdiSegment,
@@ -120,6 +125,36 @@ class TestMemorySpaces(unittest.TestCase):
         # String
         cfg.set_string(16, "Main Line Turnout", 20)
         self.assertEqual(cfg.get_string(16, 20), "Main Line Turnout")
+
+    def test_acdi_spaces_unit(self):
+        snip = SnipData(
+            manufacturer="SVL Railroad",
+            model="pyLCC-Hub",
+            hardware_version="v1.2",
+            software_version="0.2.0",
+            user_name="Yard Tower",
+            user_description="East Throat",
+        )
+        mfg = AcdiManufacturerSpace(snip)
+        self.assertEqual(mfg.get_size(), 125)
+        self.assertEqual(mfg.read(0, 1), b"\x04")
+        self.assertEqual(mfg.read(1, 13), b"SVL Railroad\x00")
+        self.assertEqual(mfg.read(42, 10), b"pyLCC-Hub\x00")
+        self.assertEqual(mfg.read(83, 5), b"v1.2\x00")
+        self.assertEqual(mfg.read(104, 6), b"0.2.0\x00")
+        self.assertFalse(mfg.write(1, b"Hack"))
+
+        user = AcdiUserSpace(snip)
+        self.assertEqual(user.get_size(), 128)
+        self.assertEqual(user.read(0, 1), b"\x02")
+        self.assertEqual(user.read(1, 11), b"Yard Tower\x00")
+        self.assertEqual(user.read(64, 12), b"East Throat\x00")
+
+        # Write new user name and description -> syncs live into SnipData
+        self.assertTrue(user.write(1, b"West Interlocking\x00"))
+        self.assertTrue(user.write(64, b"Staging Approach\x00"))
+        self.assertEqual(snip.user_name, "West Interlocking")
+        self.assertEqual(snip.user_description, "Staging Approach")
 
 
 class TestCdiGenerator(unittest.TestCase):
@@ -405,6 +440,59 @@ class TestMemoryConfigurationProtocol(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ok)
         await asyncio.sleep(0.05)
         self.assertTrue(restarted)
+
+    async def test_acdi_protocol_read_write_via_datagram(self):
+        """Test ACDI Mfg (0xFC) read and User (0xFB) read/write over Datagram Protocol 0x20."""
+        snip = SnipData(
+            manufacturer="SVL",
+            model="ACDI-Node",
+            hardware_version="1.0",
+            software_version="0.1",
+            user_name="Old Name",
+            user_description="Old Desc",
+        )
+        self.mem_service.register_space(AcdiManufacturerSpace(snip))
+        self.mem_service.register_space(AcdiUserSpace(snip))
+
+        replies = []
+        async def reply_handler(datagram):
+            if datagram.data[0] == DATAGRAM_PROTOCOL_MEMORY_CONFIG:
+                replies.append(datagram.data)
+            return True
+
+        self.datagram_mgr1.register_handler(DATAGRAM_PROTOCOL_MEMORY_CONFIG, reply_handler)
+
+        # 1. Options reply should now advertise 0xFC / 0xFB support and lowest_space=0xFB
+        await self.datagram_mgr1.send_datagram(0x302, bytes([DATAGRAM_PROTOCOL_MEMORY_CONFIG, CMD_GET_CONFIG_OPTIONS]))
+        await asyncio.sleep(0.05)
+        opt_reply = replies.pop(0)
+        opts = struct.unpack(">H", opt_reply[2:4])[0]
+        self.assertTrue(bool(opts & 0x0200))
+        self.assertTrue(bool(opts & 0x0100))
+        self.assertEqual(opt_reply[6], SPACE_ACDI_USER)
+
+        # 2. Generic Read from Space 0xFC (manufacturer at offset 1)
+        read_mfg = bytearray([DATAGRAM_PROTOCOL_MEMORY_CONFIG, CMD_READ_GENERIC])
+        read_mfg.extend(struct.pack(">I", 1))
+        read_mfg.append(SPACE_ACDI_MFG)
+        read_mfg.append(4)
+        await self.datagram_mgr1.send_datagram(0x302, bytes(read_mfg))
+        await asyncio.sleep(0.05)
+        mfg_reply = replies.pop(0)
+        self.assertEqual(mfg_reply[1], CMD_READ_REPLY_GENERIC)
+        self.assertEqual(mfg_reply[6], SPACE_ACDI_MFG)
+        self.assertEqual(mfg_reply[7:], b"SVL\x00")
+
+        # 3. Generic Write to Space 0xFB updates live SnipData
+        write_user = bytearray([DATAGRAM_PROTOCOL_MEMORY_CONFIG, CMD_WRITE_GENERIC])
+        write_user.extend(struct.pack(">I", 1))
+        write_user.append(SPACE_ACDI_USER)
+        write_user.extend(b"Signal Box 3\x00")
+        await self.datagram_mgr1.send_datagram(0x302, bytes(write_user))
+        await asyncio.sleep(0.05)
+        write_reply = replies.pop(0)
+        self.assertEqual(write_reply[1], CMD_WRITE_REPLY_GENERIC)
+        self.assertEqual(snip.user_name, "Signal Box 3")
 
 
 if __name__ == "__main__":

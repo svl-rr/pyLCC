@@ -13,6 +13,7 @@ from pylcc.snip import (
     PIP_SIMPLE_NODE,
     PIP_DATAGRAM,
     PIP_EVENT_EXCHANGE,
+    PIP_ACDI,
     PIP_SNIP,
     PIP_MEMORY_CONFIG,
     PIP_CDI,
@@ -74,6 +75,7 @@ class TestSnip(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(bool(pip_mask & PIP_SIMPLE_NODE))
         self.assertTrue(bool(pip_mask & PIP_DATAGRAM))
         self.assertTrue(bool(pip_mask & PIP_EVENT_EXCHANGE))
+        self.assertTrue(bool(pip_mask & PIP_ACDI))
         self.assertTrue(bool(pip_mask & PIP_SNIP))
         self.assertTrue(bool(pip_mask & PIP_MEMORY_CONFIG))
         self.assertTrue(bool(pip_mask & PIP_CDI))
