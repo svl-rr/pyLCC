@@ -62,6 +62,37 @@ asyncio.run(main())
 
 ---
 
+## Installation
+
+### Desktop Python (`pip`)
+Install locally or directly from GitHub with zero external dependencies:
+```bash
+pip install .
+# Or editable development install:
+pip install -e .
+```
+
+### MicroPython (`mip`)
+Install the core stack (ideal for WiFi-only nodes) or a platform-specific bundle including only the driver for your microcontroller:
+```python
+import mip
+
+# Core stack only (no hardware CAN drivers)
+mip.install("github:svl-rr/pyLCC", target="/lib")
+
+# Platform-specific bundles (saves flash/RAM):
+mip.install("github:svl-rr/pyLCC/package-esp32.json", target="/lib")  # ESP32 / ESP32-C6 TWAI
+mip.install("github:svl-rr/pyLCC/package-pico.json", target="/lib")   # Pico / Pico 2 + MCP2518FD
+mip.install("github:svl-rr/pyLCC/package-stm32.json", target="/lib")  # STM32 pyb.CAN
+mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bundle
+```
+
+### Documentation Guides
+- **[Hardware Wiring & Pinouts](docs/hardware_wiring.md)**: Connection diagrams, RJ45 OpenLCB bus pinouts, 120Ω termination, and transceiver wiring for ESP32-C6, Pico + MCP2518FD, and STM32.
+- **[JMRI Integration Guide](docs/jmri_integration.md)**: Step-by-step setup for GridConnect TCP, OpenLCB Network Tree discovery, DecoderPro CDI configuration, and Turnout/Sensor tables.
+
+---
+
 ## Protocol Stack & Architectural Layers
 
 ### Step 1: Frame & Transport Abstraction (`pylcc.can`, `pylcc.gridconnect`, `pylcc.transport`)
@@ -114,24 +145,32 @@ asyncio.run(main())
 - **Pluggable Component Reference Stubs (supports `LCC*` prefixes to prevent collisions with user drivers)**:
   - **`LCCTurnout` / `Turnout`**: Consumes Close/Throw events; produces feedback; hooks into `on_change`.
   - **`LCCSensor` / `Sensor` / `LCCBlockDetector`**: Produces Active/Inactive events; responds to Identify Producer queries.
-  - **`LCCSignal` / `Signal` / `LCCSignalMast`**: Consumes aspect events (`STOP`, `APPROACH`, `CLEAR`, etc.); notifies via `on_aspect_change`.
+  - **`LCCSignal` / `Signal` / `LCCSignalMast`**: Consumes aspect events (`STOP`, `APPROACH`, `CLEAR`, etc.); notifies via `on_change`.
   - **`LCCOutput` / `Output` / `LCCLight`**: Consumes discrete On/Off commands; hooks into `on_change`.
+
+### Step 7: Hardware CAN Drivers & WiFi Bridge (`pylcc.hardware`, `pylcc.bridge`)
+- **Platform-Isolated CAN Drivers** (never imported by default in `pylcc.__init__` to conserve microcontroller flash and RAM):
+  - **`Esp32TwaiTransport` (`pylcc.hardware.esp32_twai`)**: Native ESP32 / ESP32-C6 TWAI controller (`machine.TWAI` / `machine.CAN`) configured for 125 kbps 29-bit extended frames with burst FIFO draining.
+  - **`Mcp2518fdTransport` (`pylcc.hardware.mcp2518fd`)**: High-speed SPI driver for Raspberry Pi Pico / Pico 2 (`RP2040` / `RP2350`) with MCP2517FD / MCP2518FD, 31-message deep hardware RX FIFO (`FSIZE=30`), active-low `int_pin` gating, and cached SPI register writes.
+  - **`Stm32CanTransport` (`pylcc.hardware.stm32_can`)**: Native STM32 CAN / FDCAN transport via `pyb.CAN` with 32-bit acceptance filter mask (`MASK32`) and burst FIFO draining.
+- **Bidirectional WiFi $\leftrightarrow$ CAN Gateway (`pylcc.bridge.LCCBridge`)**:
+  - Bridges physical CAN buses and GridConnect TCP clients/servers seamlessly with real-time frame and error counters (`get_stats()`).
 
 ---
 
 ## Validation & Testing
 
 ### Running Automated Unit Tests
-The project includes a comprehensive test suite covering all layers:
+The project includes a comprehensive test suite covering all protocol layers, hardware drivers, bridge forwarding, and optimizations:
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **75 automated tests (100% passing)**.*
+*Current test suite: **83 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
-All core modules are verified to compile cleanly with `mpy-cross` without desktop-only dependencies:
+All modules are designed for clean compilation with `mpy-cross` without desktop-only dependencies:
 ```bash
-for f in pylcc/*.py pylcc/transport/*.py pylcc/components/*.py; do
+for f in pylcc/*.py pylcc/transport/*.py pylcc/components/*.py pylcc/hardware/*.py; do
     mpy-cross "$f"
 done
 ```
@@ -181,4 +220,4 @@ Bridges your physical CAN bus (125 kbps) with wireless TCP clients (e.g. JMRI) o
 
 ## Project Roadmap
 
-See [TODO.md](TODO.md) for the detailed implementation roadmap and completed milestones (Steps 1–7 complete; Step 8 packaging next).
+See [TODO.md](TODO.md) for the detailed implementation roadmap and completed milestones (Steps 1–8 and performance/memory optimizations complete).
