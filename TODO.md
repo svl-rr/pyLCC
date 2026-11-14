@@ -12,7 +12,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
 - [x] **Step 4: Datagram Transport & SNIP Engine**
 - [x] **Step 5: Memory Configuration Protocol & CDI XML**
 - [x] **Step 6: High-Level Node Abstraction & Application API**
-- [ ] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
+- [x] **Step 7: Hardware CAN Drivers (STM32, ESP32-C6, Pico MCP2517FD)**
 - [ ] **Step 8: Peripheral I/O, JMRI Integration & Packaging**
 
 ---
@@ -82,8 +82,19 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - `Sensor` / `BlockDetector` / `Input`: Produces Active/Inactive events, responds to Producer Identify inquiries.
     - `Signal` / `SignalMast`: Consumes arbitrary aspect events (STOP, APPROACH, CLEAR, etc.), `on_aspect_change` hook.
     - `Output` / `Light`: Consumes On/Off discrete command events.
+- [x] **Modular Hardware CAN Drivers (`pylcc.hardware`)**
+  - Modular, isolated architecture saving flash and RAM on target microcontrollers (zero cross-platform imports).
+  - **ESP32 / ESP32-C6 TWAI Driver (`pylcc.hardware.esp32_twai`)**:
+    - Direct interface to on-chip Two-Wire Automotive Interface (Classical CAN 2.0B) via `machine.TWAI` / `machine.CAN`.
+    - Configured for standard OpenLCB 125 kbps with 29-bit extended frames and non-blocking RX pump.
+  - **Raspberry Pi Pico / Pico 2 MCP2517FD / MCP2518FD Driver (`pylcc.hardware.mcp2518fd`)**:
+    - High-speed SPI controller driver for RP2040 / RP2350 (up to 20 MHz).
+    - Deep 31-message hardware FIFO configuration (`FSIZE=30`) eliminating packet loss during 125 kbps bus bursts.
+  - **STM32 Native CAN Driver (`pylcc.hardware.stm32_can`)**:
+    - Direct interface to STM32 on-chip CAN controller via MicroPython's `pyb.CAN`.
+    - Extended 32-bit filter mask accepting all 29-bit OpenLCB frames into FIFO 0.
 - [x] **Validation & Tooling**
-  - 57 automated unit tests (100% passing).
+  - 72 automated unit tests (100% passing).
   - MicroPython bytecode compilation verified via `mpy-cross` across all modules.
 
 ---
@@ -104,19 +115,6 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Pre-compute and cache `_bytes` in `__init__` so `to_bytes()` returns the cached reference without heap re-allocation.
 - [ ] **Stale Datagram Buffer Eviction (`pylcc/datagram.py`)**:
   - Implement timestamp tracking and a 3-second eviction timeout for partial multi-frame datagram reassembly buffers (per NMRA S-9.7.3.2 Section 4.2) to prevent memory leaks from dropped transmissions.
-
----
-
-### Step 7: Hardware CAN Drivers (Target Platforms)
-- [ ] **STM32 Native CAN Driver (`pylcc.hardware.stm32_can`)**
-  - [ ] Direct interface to STM32 on-chip CAN / FDCAN peripheral via MicroPython's `pyb.CAN` / `machine.CAN`.
-  - [ ] Configure 125 kbps bitrate, 29-bit extended filters, and non-blocking RX/TX loops.
-- [ ] **ESP32-C6 Native TWAI Driver (`pylcc.hardware.esp32_twai`)**
-  - [ ] ESP32-C6 built-in TWAI (Classical CAN 2.0B) driver interface with external 3.3V transceiver.
-  - [ ] Pin configuration (TX/RX GPIO) and interrupt/async polling.
-- [ ] **Raspberry Pi Pico (RP2040 / RP2350) MCP2517FD / MCP2518FD Driver (`pylcc.hardware.mcp2518fd`)**
-  - [ ] High-speed SPI driver (up to 20 MHz) for the MCP2517FD / MCP2518FD external controller.
-  - [ ] 31-message deep FIFO configuration to ensure zero dropped packets during 125 kbps bus bursts.
 
 ---
 
