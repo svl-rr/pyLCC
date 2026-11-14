@@ -11,6 +11,7 @@
     ["pylcc/snip.py", "github:svl-rr/pyLCC/pylcc/snip.py"],
     ["pylcc/memory.py", "github:svl-rr/pyLCC/pylcc/memory.py"],
     ["pylcc/cdi.py", "github:svl-rr/pyLCC/pylcc/cdi.py"],
+    ["pylcc/traction.py", "github:svl-rr/pyLCC/pylcc/traction.py"],
     ["pylcc/node.py", "github:svl-rr/pyLCC/pylcc/node.py"],
     ["pylcc/bridge.py", "github:svl-rr/pyLCC/pylcc/bridge.py"],
     ["pylcc/transport/__init__.py", "github:svl-rr/pyLCC/pylcc/transport/__init__.py"],

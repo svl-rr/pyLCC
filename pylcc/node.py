@@ -20,7 +20,13 @@ from .event_id import EventID
 from .alias import AliasManager, STATE_PERMITTED
 from .events import EventManager, EVENT_STATE_VALID, EVENT_STATE_INVALID, EVENT_STATE_UNKNOWN
 from .datagram import DatagramManager
-from .snip import SnipData, SnipService
+from .snip import SnipData, SnipService, PIP_TRACTION_CONTROL
+from .traction import (
+    TractionService,
+    MTI_TRACTION_CONTROL_COMMAND,
+    MTI_TRACTION_CONTROL_REPLY,
+    EVENT_IS_TRAIN,
+)
 from .memory import (
     MemoryConfigurationService,
     SPACE_CDI,
@@ -53,6 +59,8 @@ _KNOWN_ADDRESSED_MTIS = (
     0x0968,  # Identify Events Addressed
     0x0A28,  # Datagram Received OK
     0x0A48,  # Datagram Rejected
+    0x05EB,  # Traction Control Command
+    0x01E9,  # Traction Control Reply
     0x0068,  # Optional Interaction Rejected
     0x00A8,  # Terminate Due to Error
 )
@@ -92,6 +100,7 @@ class Node:
         self.datagram_manager = DatagramManager(self.node_id, self.alias_manager, self.transport)
         self.snip_service = SnipService(self.node_id, self.alias_manager, self.transport, snip_data=self.snip_data)
         self.memory_service = MemoryConfigurationService(self.node_id, self.alias_manager, self.datagram_manager)
+        self.traction_service = TractionService(self.node_id, self.alias_manager, self.transport)
 
         # Wire restart callback if provided
         if self.on_restart:
@@ -272,6 +281,30 @@ class Node:
         for comp in changed_comps:
             comp.setup_events()
 
+    def enable_traction(
+        self,
+        is_train: bool = True,
+        on_speed_change=None,
+        on_function_change=None,
+        on_emergency_stop=None,
+        on_controller_change=None,
+    ) -> TractionService:
+        """Enable Train Node Traction Control, PIP_TRACTION_CONTROL flag, and Is-Train event."""
+        self.traction_service.enable_train(
+            is_train=is_train,
+            on_speed_change=on_speed_change,
+            on_function_change=on_function_change,
+            on_emergency_stop=on_emergency_stop,
+            on_controller_change=on_controller_change,
+        )
+        if is_train:
+            self.snip_service.protocols |= PIP_TRACTION_CONTROL
+            self.event_manager.register_producer(EVENT_IS_TRAIN, state=EVENT_STATE_VALID)
+        else:
+            self.snip_service.protocols &= ~PIP_TRACTION_CONTROL
+            self.event_manager.unregister_producer(EVENT_IS_TRAIN)
+        return self.traction_service
+
     # --- Message Network Discovery & Error Handling ---
 
     async def _send_verified_node_id(self):
@@ -313,6 +346,9 @@ class Node:
                 payload = frame.destination_payload
                 if not payload or payload == self.node_id.to_bytes():
                     await self._send_verified_node_id()
+            elif mti == MTI_TRACTION_CONTROL_COMMAND:
+                if not self.traction_service.is_train:
+                    await self._send_oir(frame.source_alias, mti)
             elif mti not in _KNOWN_ADDRESSED_MTIS:
                 await self._send_oir(frame.source_alias, mti)
 
@@ -324,6 +360,7 @@ class Node:
         await self.event_manager.process_frame(frame)
         await self.datagram_manager.process_frame(frame)
         await self.snip_service.process_frame(frame)
+        await self.traction_service.process_frame(frame)
         await self._process_node_message(frame)
 
     def _dispatch_frame(self, frame: CanFrame):
@@ -337,6 +374,8 @@ class Node:
             return
 
         if frame.is_can_control:
+            if frame.is_amd and self.traction_service.is_train and len(frame.data) == 6:
+                self.traction_service._alias_cache[frame.data] = frame.source_alias
             if frame.is_ame and self.alias_manager.is_permitted:
                 if not frame.data or frame.data == self.node_id.to_bytes():
                     asyncio.create_task(self.alias_manager.process_frame(frame))
@@ -362,6 +401,13 @@ class Node:
                 elif mti == 0x0968:
                     if self.event_manager.has_interest(frame):
                         asyncio.create_task(self.event_manager.process_frame(frame))
+                elif mti == MTI_TRACTION_CONTROL_REPLY:
+                    asyncio.create_task(self.traction_service.process_frame(frame))
+                elif mti == MTI_TRACTION_CONTROL_COMMAND:
+                    if self.traction_service.is_train:
+                        asyncio.create_task(self.traction_service.process_frame(frame))
+                    else:
+                        asyncio.create_task(self._process_node_message(frame))
                 elif mti == MTI_VERIFY_NODE_ID_ADDRESSED or mti not in _KNOWN_ADDRESSED_MTIS:
                     asyncio.create_task(self._process_node_message(frame))
             else:

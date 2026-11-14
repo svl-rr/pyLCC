@@ -149,8 +149,15 @@ mip.install("github:svl-rr/pyLCC/package-all.json", target="/lib")    # Full bun
   - **`LCCSensor` / `Sensor` / `LCCBlockDetector`**: Produces Active/Inactive events; responds to Identify Producer queries.
   - **`LCCSignal` / `Signal` / `LCCSignalMast`**: Consumes aspect events (`STOP`, `APPROACH`, `CLEAR`, etc.); notifies via `on_change`.
   - **`LCCOutput` / `Output` / `LCCLight`**: Consumes discrete On/Off commands; hooks into `on_change`.
+  - **`LCCTrain` / `Train`**: Train Node locomotive component supporting Traction Control speed/direction, functions, emergency stop, and consist listener hooks.
 
-### Step 7: Hardware CAN Drivers & WiFi Bridge (`pylcc.hardware`, `pylcc.bridge`)
+### Step 7: Traction Control Protocol (`pylcc.traction`)
+- **NMRA S-9.7.4.4 / TN-9.7.4.4 Compliance**:
+  - **IEEE 754 `float16` Speed/Direction Codec**: `encode_float16()` / `decode_float16()` preserving signed `+0.0` (Forward Stop) and `-0.0` (Reverse Stop).
+  - **Train Node & Throttle Client (`TractionService`)**: Multi-frame addressed message support for `Set Speed/Direction` (`0x00`), `Set Function` (`0x01`, F0–F28+), `Emergency Stop` (`0x02`), `Query Speed/Function` (`0x10`/`0x11`), `Controller Config` (`0x20`), `Consist Listener Management` (`0x30` with automatic command forwarding), and `Reservations` (`0x40`).
+  - Automatically advertises `PIP_TRACTION_CONTROL` (`0x000400`) and Well-Known `EVENT_IS_TRAIN` (`01.01.00.00.00.00.03.03`) when enabled via `node.enable_traction()` or `LCCTrain`.
+
+### Step 8: Hardware CAN Drivers & WiFi Bridge (`pylcc.hardware`, `pylcc.bridge`)
 - **Platform-Isolated CAN Drivers** (never imported by default in `pylcc.__init__` to conserve microcontroller flash and RAM):
   - **`Esp32TwaiTransport` (`pylcc.hardware.esp32_twai`)**: Native ESP32 / ESP32-C6 TWAI controller (`machine.TWAI` / `machine.CAN`) configured for 125 kbps 29-bit extended frames with burst FIFO draining.
   - **`Mcp2518fdTransport` (`pylcc.hardware.mcp2518fd`)**: High-speed SPI driver for Raspberry Pi Pico / Pico 2 (`RP2040` / `RP2350`) with MCP2517FD / MCP2518FD, 31-message deep hardware RX FIFO (`FSIZE=30`), active-low `int_pin` gating, and cached SPI register writes.
@@ -167,7 +174,7 @@ The project includes a comprehensive test suite covering all protocol layers, ha
 ```bash
 python3 -m unittest discover tests
 ```
-*Current test suite: **95 automated tests (100% passing)**.*
+*Current test suite: **101 automated tests (100% passing)**.*
 
 ### MicroPython Bytecode Compilation Verification
 All modules are designed for clean compilation with `mpy-cross` without desktop-only dependencies:

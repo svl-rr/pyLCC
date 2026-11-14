@@ -13,6 +13,7 @@ from .devices import (
     SignalMast,
     Output,
     Light,
+    Train,
     LCCTurnout,
     LCCSensor,
     LCCBlockDetector,
@@ -21,6 +22,7 @@ from .devices import (
     LCCSignalMast,
     LCCOutput,
     LCCLight,
+    LCCTrain,
 )
 
 __all__ = [
@@ -33,6 +35,7 @@ __all__ = [
     "SignalMast",
     "Output",
     "Light",
+    "Train",
     "LCCTurnout",
     "LCCSensor",
     "LCCBlockDetector",
@@ -41,4 +44,5 @@ __all__ = [
     "LCCSignalMast",
     "LCCOutput",
     "LCCLight",
+    "LCCTrain",
 ]

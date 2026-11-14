@@ -387,6 +387,80 @@ class Output(BaseComponent):
 # Aliases
 Light = Output
 
+
+# --- Train / Locomotive Component ---
+
+class Train(BaseComponent):
+    """
+    OpenLCB Train / Locomotive Component (NMRA S-9.7.4.4).
+    Automatically enables Traction Control on its parent Node, sets
+    PIP_TRACTION_CONTROL, and produces Well-Known Event 01.01.00.00.00.00.03.03.
+    """
+    __slots__ = (
+        "on_speed_change",
+        "on_function_change",
+        "on_emergency_stop",
+        "initial_functions",
+    )
+
+    def __init__(
+        self,
+        name: str = "",
+        on_speed_change=None,
+        on_function_change=None,
+        on_emergency_stop=None,
+        initial_functions: dict = None,
+        on_change=None,
+    ):
+        super().__init__(name=name, on_change=on_change)
+        self.on_speed_change = on_speed_change
+        self.on_function_change = on_function_change
+        self.on_emergency_stop = on_emergency_stop
+        self.initial_functions = dict(initial_functions) if initial_functions else {}
+
+    def bind(self, node):
+        self.node = node
+        svc = node.enable_traction(
+            is_train=True,
+            on_speed_change=self.on_speed_change,
+            on_function_change=self.on_function_change,
+            on_emergency_stop=self.on_emergency_stop,
+        )
+        for fn_addr, val in self.initial_functions.items():
+            svc.functions[int(fn_addr)] = int(val)
+
+    @property
+    def speed(self) -> float:
+        return self.node.traction_service.set_speed if self.node else 0.0
+
+    @property
+    def is_reverse(self) -> bool:
+        return self.node.traction_service.is_reverse if self.node else False
+
+    @property
+    def emergency_stop(self) -> bool:
+        return self.node.traction_service.emergency_stop if self.node else False
+
+    def get_function(self, fn_addr: int) -> int:
+        if not self.node:
+            return self.initial_functions.get(int(fn_addr), 0)
+        return self.node.traction_service.functions.get(int(fn_addr), 0)
+
+    def set_speed(self, speed_mps: float, reverse: bool = False):
+        if self.node:
+            svc = self.node.traction_service
+            svc.set_speed = abs(float(speed_mps))
+            svc.is_reverse = bool(reverse or speed_mps < 0)
+            svc.emergency_stop = False
+            svc.commanded_speed = svc.set_speed
+
+    def set_function(self, fn_addr: int, value: int):
+        if self.node:
+            self.node.traction_service.functions[int(fn_addr)] = int(value)
+        else:
+            self.initial_functions[int(fn_addr)] = int(value)
+
+
 # LCC-prefixed aliases for layout naming and collision prevention
 LCCTurnout = Turnout
 LCCSensor = Sensor
@@ -396,3 +470,4 @@ LCCSignal = Signal
 LCCSignalMast = SignalMast
 LCCOutput = Output
 LCCLight = Light
+LCCTrain = Train

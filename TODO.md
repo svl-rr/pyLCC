@@ -85,6 +85,11 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - `Sensor` / `BlockDetector` / `Input`: Produces Active/Inactive events, responds to Producer Identify inquiries.
     - `Signal` / `SignalMast`: Consumes arbitrary aspect events (STOP, APPROACH, CLEAR, etc.), `on_aspect_change` hook.
     - `Output` / `Light`: Consumes On/Off discrete command events.
+    - `Train` / `LCCTrain`: Enables Train Node Traction Control (`PIP_TRACTION_CONTROL`, `EVENT_IS_TRAIN`) with speed, function, and emergency stop callbacks.
+- [x] **Traction Control Protocol (`pylcc.traction`) (NMRA S-9.7.4.4 / TN-9.7.4.4)**
+  - Pure-Python IEEE 754 `float16` speed & direction codec (`encode_float16`, `decode_float16`) with signed zero support (`+0.0` Forward Stop / `-0.0` Reverse Stop).
+  - Multi-frame addressed CAN segmentation/reassembly for `TractionControlCommand` (`0x05EB`) and `TractionControlReply` (`0x01E9`).
+  - Full Train Node responder & Throttle Controller client API: Speed/Dir (`0x00`), Functions F0–F28+ (`0x01`), E-Stop (`0x02`), Query Speed/Function (`0x10`/`0x11`), Controller Assign/Release/Query (`0x20`), Consist Listener Attach/Detach/Query (`0x30`) with forwarding, and Reserve/Release (`0x40`).
 - [x] **Modular Hardware CAN Drivers (`pylcc.hardware`)**
   - Modular, isolated architecture saving flash and RAM on target microcontrollers (zero cross-platform imports).
   - **ESP32 / ESP32-C6 TWAI Driver (`pylcc.hardware.esp32_twai`)**:
@@ -106,7 +111,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
   - Step-by-step JMRI integration guide (`docs/jmri_integration.md`) covering discovery, CDI configuration via DecoderPro, turnout/sensor tables, and wireless gateway connection.
   - MIT License (`LICENSE`).
 - [x] **Validation & Tooling**
-  - 95 automated unit tests (100% passing).
+  - 101 automated unit tests (100% passing).
   - Comprehensive runnable examples (`mock_lcc_hub`, `gridconnect_tcp_monitor`, `virtual_turnout_node`, `jmri_interactive_node`, `micropython_wifi_node`, `wifi_can_bridge`).
 - [x] **Optimizations & MicroPython Tuning (Performance & Memory)**
   - [x] **Zero-Allocation Event Filtering (`pylcc/events.py`)**: Fast 8-byte dict lookups (`_consumers_by_bytes` / `_producers_by_bytes`) and synchronous `has_interest()` filtering without instantiating `EventID` objects.
