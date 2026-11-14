@@ -83,7 +83,7 @@ A lightweight, modular OpenLCB / NMRA LCC (Layout Command Control) stack for Mic
     - `Signal` / `SignalMast`: Consumes arbitrary aspect events (STOP, APPROACH, CLEAR, etc.), `on_aspect_change` hook.
     - `Output` / `Light`: Consumes On/Off discrete command events.
 - [x] **Validation & Tooling**
-  - 56 automated unit tests (100% passing).
+  - 57 automated unit tests (100% passing).
   - MicroPython bytecode compilation verified via `mpy-cross` across all modules.
 
 ---
